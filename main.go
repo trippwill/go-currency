@@ -7,37 +7,15 @@ import (
 )
 
 func main() {
-	// Example usage of FixedPoint
-	fstr := "%-5s: %10s | %s\n"
+	a, _ := fp.Parse128("1.23")
+	b, _ := fp.Parse128("4.56")
 
-	fp1, err := fp.NewFixedPoint("123.456")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	fmt.Println("a: ", a)
+	fmt.Println("b: ", b)
 
-	fp2, err := fp.NewFixedPoint("-0.1")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
+	fmt.Println("a: ", a.Scientific())
+	fmt.Println("b: ", b.Scientific())
 
-	fmt.Printf(fstr, "FP 1", fp1, fp1.Debug())
-	fmt.Printf(fstr, "FP 2", fp2, fp2.Debug())
-
-	sum := fp1.Add(fp2)
-	fmt.Printf(fstr, "Sum", sum, sum.Debug())
-
-	fp3, err := fp.NewFixedPoint("NaN")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	fmt.Printf(fstr, "NaN", fp3, fp3.Debug())
-	fp4, err := fp.NewFixedPoint("inf")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	fmt.Printf(fstr, "Inf", fp4, fp4.Debug())
+	fmt.Println("a: ", a.Debug())
+	fmt.Println("b: ", b.Debug())
 }
