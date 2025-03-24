@@ -3,36 +3,41 @@ package main
 import (
 	"fmt"
 
-	"github.com/trippwill/go-currency/currency"
+	fp "github.com/trippwill/go-currency/fixedpoint"
 )
 
 func main() {
-	a := currency.NewAmountFromString[currency.USD]("0.100", currency.DefaultParseOpts)
-	fmt.Println("0.100", a)
+	// Example usage of FixedPoint
+	fstr := "%-5s: %10s | %s\n"
 
-	a = currency.Amount[currency.USD]{Value: currency.FixedPoint{
-		Base:  1005000,
-		Scale: 5,
-	}}
+	fp1, err := fp.NewFixedPoint("123.456")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 
-	fmt.Println("10.05000", a)
+	fp2, err := fp.NewFixedPoint("-0.1")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
 
-	b := currency.NewAmount[currency.GBP](
-		currency.NewFixedPoint("258.0214", nil),
-	)
+	fmt.Printf(fstr, "FP 1", fp1, fp1.Debug())
+	fmt.Printf(fstr, "FP 2", fp2, fp2.Debug())
 
-	fmt.Println("258.0214", b)
+	sum := fp1.Add(fp2)
+	fmt.Printf(fstr, "Sum", sum, sum.Debug())
 
-	// Adding two amounts of the same currency that were created with different precisions
-	usdAmount1 := currency.NewAmountFromString[currency.USD]("1.23", currency.DefaultParseOpts)
-	usdAmount2 := currency.NewAmountFromString[currency.USD]("4.56789", currency.DefaultParseOpts)
-	sumUSD := usdAmount1.Add(usdAmount2)
-	fmt.Println("USD Sum:", sumUSD) // 5.79789
-
-	// gbpAmount := currency.NewAmountFromString(currency.GBP{}, "2.50", currency.DefaultParseOpts)
-	// mixedSum := usdAmount1.Add(gbpAmount)
-	// fmt.Println("Mixed Sum (USD + GBP):", mixedSum)
-
-	mulUSD := sumUSD.Mul(currency.NewFixedPoint("2.12", nil))
-	fmt.Println("USD Mul:", mulUSD) // 12.2915268
+	fp3, err := fp.NewFixedPoint("NaN")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Printf(fstr, "NaN", fp3, fp3.Debug())
+	fp4, err := fp.NewFixedPoint("inf")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Printf(fstr, "Inf", fp4, fp4.Debug())
 }
