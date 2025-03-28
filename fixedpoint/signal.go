@@ -1,6 +1,6 @@
 package fixedpoint
 
-type Signal uint8
+import "strings"
 
 const SignalClear Signal = 0
 
@@ -11,32 +11,61 @@ const (
 	SignalDivisionImpossible
 	SignalInexact
 	SignalInvalidOperation
-	s_conversionSyntax
+	sig_conversionSyntax
 )
 
 const (
-	SignalConversionSyntax = s_conversionSyntax | SignalInvalidOperation
+	SignalConversionSyntax = sig_conversionSyntax | SignalInvalidOperation
 )
 
-func (s Signal) String() string {
-	switch s {
-	case SignalClear:
-		return "SignalClear"
-	case SignalOverflow:
-		return "SignalOverflow"
-	case SignalUnderflow:
-		return "SignalUnderflow"
-	case SignalDivisionByZero:
-		return "SignalDivisionByZero"
-	case SignalDivisionImpossible:
-		return "SignalDivisionImpossible"
-	case SignalInexact:
-		return "SignalInexact"
-	case SignalInvalidOperation:
-		return "SignalInvalidOperation"
-	case SignalConversionSyntax:
-		return "SignalConversionSyntax"
-	default:
-		return "Signal(0x" + s.String() + ")"
+var debugFlags = []struct {
+	symbol string
+	flag   Signal
+}{
+	{"o", SignalOverflow},
+	{"u", SignalUnderflow},
+	{"0", SignalDivisionByZero},
+	{"P", SignalDivisionImpossible},
+	{"i", SignalInexact},
+	{"X", SignalInvalidOperation},
+	{"c", SignalConversionSyntax},
+}
+
+var stringFlags = []struct {
+	name string
+	flag Signal
+}{
+	{"SignalOverflow", SignalOverflow},
+	{"SignalUnderflow", SignalUnderflow},
+	{"SignalDivisionByZero", SignalDivisionByZero},
+	{"SignalDivisionImpossible", SignalDivisionImpossible},
+	{"SignalInexact", SignalInexact},
+	{"SignalInvalidOperation", SignalInvalidOperation},
+	{"SignalConversionSyntax", SignalConversionSyntax},
+}
+
+func (s Signal) Debug() string {
+	var signals []string
+	for _, f := range debugFlags {
+		if s&f.flag != 0 {
+			signals = append(signals, f.symbol)
+		}
 	}
+
+	switch len(signals) {
+	case 0:
+		return "*"
+	default:
+		return strings.Join(signals, "")
+	}
+}
+
+func (s Signal) String() string {
+	var signals []string
+	for _, f := range stringFlags {
+		if s&f.flag != 0 {
+			signals = append(signals, f.name)
+		}
+	}
+	return strings.Join(signals, "|")
 }

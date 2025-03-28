@@ -3,7 +3,6 @@
 package fixedpoint
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -13,11 +12,18 @@ import (
 //   - Positive values: from the smallest positive 1.0e-9999 to the largest positive 9.999999999999999e+9999
 //   - Negative values: from the largest negative -9.999999999999999e+9999 to the smallest negative -1.0e-9999
 type FixedPoint struct {
-	coe coefficient // sign[63] + coefficient[62:0]
-	exp exponent    // exponent
-	flg flags       // flags
-	_   uint8       // padding
+	coe  coefficient
+	exp  exponent
+	sign bool
+	flg  flags
+	ctx  context
 }
+
+type (
+	Signal    uint8
+	Precision uint8
+	Rounding  uint8
+)
 
 type (
 	coefficient uint64
@@ -26,8 +32,10 @@ type (
 		sig Signal
 		inf bool
 		nan bool
-		_   bool
-		_   bool
+	}
+	context struct {
+		precision Precision
+		rounding  Rounding
 	}
 )
 
@@ -37,41 +45,75 @@ var Zero = FixedPoint{
 }
 
 var NegZero = FixedPoint{
-	coe: pack(-1, 0),
-	exp: 0,
+	sign: true,
+	coe:  0,
+	exp:  0,
 }
 
 var One = FixedPoint{
-	coe: pack(1, 1),
+	coe: 1,
 	exp: 0,
 }
 
 var NegOne = FixedPoint{
-	coe: pack(-1, 1),
-	exp: 0,
+	sign: true,
+	coe:  1,
+	exp:  0,
 }
 
+var defaultContext = context{
+	precision: fp_coe_max_len - fp_exp_limit_len,
+	rounding:  RoundingNearestEven,
+}
+
+// Update constants for 64-bit coefficient
 const (
-	fp_coe_max_val   uint64   = 999_999_999_999_999_999
-	fp_coe_max_len            = 18
-	fp_exp_limit_val exponent = 9_999
-	fp_exp_limit_len          = 4
+	fp_coe_max_val   coefficient = 9_999_999_999_999_999_999 // 10^19 - 1
+	fp_coe_max_len               = 19
+	fp_exp_limit_val exponent    = 9_999
+	fp_exp_limit_len             = 4
 )
+
+func (fp *FixedPoint) Init(sign bool, coe coefficient, exp exponent) *FixedPoint {
+	fp.sign = sign
+	fp.coe = coe
+	fp.exp = exp
+	fp.ctx = defaultContext
+	return fp
+}
+
+func (fp *FixedPoint) Parse(s string) *FixedPoint {
+	*fp = Parse(s)
+	return fp
+}
+
+func (fp *FixedPoint) SetContext(precision Precision, rounding Rounding) *FixedPoint {
+	fp.ctx.precision = precision
+	fp.ctx.rounding = rounding
+	return fp
+}
 
 // New returns a new FixedPoint value from a significand and an exponent.
 func New(significand int64, exp int16) FixedPoint {
-	coe, ok := convert_signed(significand)
-	if !ok {
-		return FixedPoint{
-			coe: coe,
-			exp: exponent(exp),
-			flg: flags{nan: true, sig: SignalOverflow},
-		}
+	sign := significand < 0
+	abs := coefficient(significand)
+	if sign {
+		abs = coefficient(-significand)
 	}
 
+	if abs > fp_coe_max_val || abs == fp_coe_max_val && exp > 0 {
+		return FixedPoint{
+			sign: sign,
+			coe:  0,
+			exp:  exponent(exp),
+			flg:  flags{inf: true, sig: SignalOverflow},
+		}
+	}
 	return FixedPoint{
-		coe: coe,
-		exp: exponent(exp),
+		sign: sign,
+		coe:  abs,
+		exp:  exponent(exp),
+		ctx:  defaultContext,
 	}
 }
 
@@ -92,30 +134,32 @@ func Parse(s string) FixedPoint {
 	switch lower {
 	case "nan", "+nan", "-nan":
 		return FixedPoint{
-			coe: pack(1, 0),
+			coe: 1,
 			exp: 0,
 			flg: flags{nan: true},
 		}
 	case "inf", "infinity", "+inf", "+infinity":
 		return FixedPoint{
-			coe: pack(1, 0),
+			coe: 1,
 			exp: 0,
 			flg: flags{inf: true},
 		}
 	case "-inf", "-infinity":
 		return FixedPoint{
-			coe: pack(-1, 0),
-			exp: 0,
-			flg: flags{inf: true},
+			sign: true,
+			coe:  1,
+			exp:  0,
+			flg:  flags{inf: true},
 		}
 	}
 
 	// Determine sign.
-	sign := int8(1)
-	if s[0] == '-' {
-		sign = -1
+	sign := false
+	switch s[0] {
+	case '-':
+		sign = true
 		s = s[1:]
-	} else if s[0] == '+' {
+	case '+':
 		s = s[1:]
 	}
 
@@ -162,8 +206,10 @@ func Parse(s string) FixedPoint {
 		exp = exponent(-len(fracPart))
 	}
 
+	coe := coefficient(value)
+
 	// Check for coefficient overflow.
-	if value > fp_coe_max_val {
+	if coe > fp_coe_max_val {
 		return FixedPoint{
 			coe: 0,
 			exp: 0,
@@ -171,10 +217,11 @@ func Parse(s string) FixedPoint {
 		}
 	}
 
-	coe := pack(sign, value)
 	return FixedPoint{
-		coe: coe,
-		exp: exp,
+		sign: sign,
+		coe:  coe,
+		exp:  exp,
+		ctx:  defaultContext,
 	}
 }
 
@@ -225,9 +272,10 @@ func (a *FixedPoint) Copy() FixedPoint {
 	}
 
 	return FixedPoint{
-		coe: a.coe,
-		exp: a.exp,
-		flg: a.flg,
+		sign: a.sign,
+		coe:  a.coe,
+		exp:  a.exp,
+		flg:  a.flg,
 	}
 }
 
@@ -238,9 +286,10 @@ func (a *FixedPoint) Clone() *FixedPoint {
 	}
 
 	return &FixedPoint{
-		coe: a.coe,
-		exp: a.exp,
-		flg: a.flg,
+		sign: a.sign,
+		coe:  a.coe,
+		exp:  a.exp,
+		flg:  a.flg,
 	}
 }
 
@@ -267,8 +316,7 @@ func (a *FixedPoint) IsZero() bool {
 	if a.flg.nan || a.flg.inf {
 		return false
 	}
-	_, abs := unpack(a.coe)
-	return abs == 0
+	return a.coe == 0
 }
 
 // IsNegative returns true if the FixedPoint is negative.
@@ -279,8 +327,7 @@ func (a *FixedPoint) IsNegative() bool {
 	if a.flg.nan || a.flg.inf {
 		return false
 	}
-	sign, _ := unpack(a.coe)
-	return sign < 0
+	return a.sign
 }
 
 // IsPositive returns true if the FixedPoint is positive.
@@ -291,14 +338,7 @@ func (a *FixedPoint) IsPositive() bool {
 	if a.flg.nan || a.flg.inf {
 		return false
 	}
-	sign, _ := unpack(a.coe)
-	return sign > 0
-}
-
-// Debug returns a formatted string with debug information about the FixedPoint.
-func (a *FixedPoint) Debug() string {
-	s, abs := unpack(a.coe)
-	return fmt.Sprintf("sign: %d, abs: %d, exp: %d, flg: %v", s, abs, a.exp, a.flg)
+	return !a.sign
 }
 
 // Add returns the sum of this FixedPoint and another.
@@ -320,29 +360,26 @@ func (a *FixedPoint) Add(b *FixedPoint) FixedPoint {
 		return overflow_operation()
 	}
 
-	x_s, x_abs := unpack(x_coe)
-	y_s, y_abs := unpack(y_coe)
-
-	var res_abs uint64
-	var res_sign int8
+	var res_coe coefficient
+	var res_sign bool
 	var ok bool
 
 	// When signs are identical, do simple addition.
-	if x_s == y_s {
-		res_abs, ok = safe_add(x_abs, y_abs)
-		res_sign = x_s
+	if a.sign == b.sign {
+		res_coe, ok = safe_add(x_coe, y_coe)
+		res_sign = a.sign
 	} else {
 		// When signs differ, subtract the smaller magnitude from the larger.
-		if x_abs >= y_abs {
-			res_abs, ok = safe_sub(x_abs, y_abs)
-			res_sign = x_s
+		if x_coe >= y_coe {
+			res_coe, ok = safe_sub(x_coe, y_coe)
+			res_sign = a.sign
 		} else {
-			res_abs, ok = safe_sub(y_abs, x_abs)
-			res_sign = y_s
+			res_coe, ok = safe_sub(y_coe, x_coe)
+			res_sign = b.sign
 		}
 		// Zero result should always be positive.
-		if res_abs == 0 {
-			res_sign = 1
+		if res_coe == 0 {
+			res_sign = false
 		}
 	}
 
@@ -352,17 +389,16 @@ func (a *FixedPoint) Add(b *FixedPoint) FixedPoint {
 	}
 
 	// Check coefficient against maximum allowed value.
-	if res_abs > fp_coe_max_val {
+	if res_coe > fp_coe_max_val {
 		return overflow_operation()
 	}
 
-	// Pack the coefficient with its sign.
-	res_coe := pack(res_sign, res_abs)
-
 	// The result uses the common (minimum) exponent.
 	return FixedPoint{
-		coe: res_coe,
-		exp: minExp,
+		sign: res_sign,
+		coe:  res_coe,
+		exp:  minExp,
+		ctx:  a.ctx,
 	}
 }
 
@@ -383,28 +419,24 @@ func (a *FixedPoint) Mul(b *FixedPoint) FixedPoint {
 		}
 	}
 
-	// Unpack the coefficients.
-	aSign, aAbs := unpack(a.coe)
-	bSign, bAbs := unpack(b.coe)
-
 	// Safely multiply the absolute values.
-	var resAbs uint64
-	if aAbs == 0 || bAbs == 0 {
-		resAbs = 0
+	var res_abs coefficient
+	if a.coe == 0 || b.coe == 0 {
+		res_abs = 0
 	} else {
 		// Check for multiplication overflow.
-		if aAbs > fp_coe_max_val/bAbs {
+		if a.coe > fp_coe_max_val/b.coe {
 			return FixedPoint{
 				coe: 0,
 				exp: 0,
 				flg: flags{inf: true, sig: SignalOverflow},
 			}
 		}
-		resAbs = aAbs * bAbs
+		res_abs = a.coe * b.coe
 	}
 
 	// Check if the result exceeds the maximum allowed coefficient.
-	if resAbs > fp_coe_max_val {
+	if res_abs > fp_coe_max_val {
 		return FixedPoint{
 			coe: 0,
 			exp: 0,
@@ -413,17 +445,16 @@ func (a *FixedPoint) Mul(b *FixedPoint) FixedPoint {
 	}
 
 	// Determine the sign of the result.
-	resSign := aSign * bSign
+	resSign := a.sign != b.sign
 
 	// Add the exponents.
 	resExp := a.exp + b.exp
 
-	// Pack the result coefficient.
-	resCoe := pack(resSign, resAbs)
-
 	return FixedPoint{
-		coe: resCoe,
-		exp: resExp,
+		sign: resSign,
+		coe:  res_abs,
+		exp:  resExp,
+		ctx:  a.ctx,
 	}
 }
 
@@ -434,13 +465,9 @@ func (a *FixedPoint) Div(b *FixedPoint) FixedPoint {
 		return invalid_operation()
 	}
 
-	// Unpack the coefficients.
-	aSign, a_abs := unpack(a.coe)
-	bSign, b_abs := unpack(b.coe)
-
 	// Handle divisor equals zero.
-	if b_abs == 0 {
-		switch a_abs {
+	if b.coe == 0 {
+		switch a.coe {
 		case 0:
 			return FixedPoint{
 				coe: 0,
@@ -449,62 +476,63 @@ func (a *FixedPoint) Div(b *FixedPoint) FixedPoint {
 			}
 		default:
 			return FixedPoint{
-				coe: pack(aSign*bSign, 0),
-				exp: 0,
-				flg: flags{inf: true, sig: SignalDivisionByZero},
+				sign: a.sign != b.sign,
+				coe:  0,
+				exp:  0,
+				flg:  flags{inf: true, sig: SignalDivisionByZero},
 			}
 		}
 	}
 
 	// Long division algorithm.
-	var adjust int = 0
-	var workingDividend uint64 = a_abs
-	var workingDivisor uint64 = b_abs
+	adjust := 0
+	work_dividend := a.coe
+	work_divisor := b.coe
 
 	// If dividend is non-zero, adjust coefficients.
-	if workingDividend != 0 {
+	if work_dividend != 0 {
 		// Scale up dividend until it's >= divisor.
-		for workingDividend < workingDivisor {
+		for work_dividend < work_divisor {
 			// Check for overflow is omitted for brevity.
-			workingDividend *= 10
+			work_dividend *= 10
 			adjust++
 		}
 		// Scale down divisor if dividend is too large.
-		for workingDividend >= workingDivisor*10 {
-			workingDivisor *= 10
+		for work_dividend >= work_divisor*10 {
+			work_divisor *= 10
 			adjust--
 		}
 	}
 
-	var resultCoeff uint64 = 0
-	var digitCount int = 0
+	var res_coe coefficient = 0
+	dig_count := 0
 	// If dividend is zero, resultCoeff remains zero.
-	if workingDividend != 0 {
+	if work_dividend != 0 {
 		for {
 			// Count how many times workingDivisor fits.
-			var count uint64 = 0
-			for workingDividend >= workingDivisor {
-				workingDividend -= workingDivisor
+			var count coefficient = 0
+			for work_dividend >= work_divisor {
+				work_dividend -= work_divisor
 				count++
 			}
-			resultCoeff = resultCoeff*10 + count
-			digitCount++
+			res_coe = res_coe*10 + count
+			dig_count++
 			// Termination condition.
-			if (workingDividend == 0 && adjust >= 0) || (digitCount >= fp_coe_max_len) {
+			if (work_dividend == 0 && adjust >= 0) || (dig_count >= fp_coe_max_len) {
 				break
 			}
-			workingDividend *= 10
+			work_dividend *= 10
 			adjust++
 		}
 	}
 
 	// Compute the resulting exponent.
-	resExp := a.exp - b.exp - exponent(adjust)
+	res_exp := a.exp - b.exp - exponent(adjust)
 	// Determine the result's sign (exclusive or).
-	resSign := aSign * bSign
+	res_sign := a.sign != b.sign
 
 	// Check for coefficient overflow.
-	if resultCoeff > fp_coe_max_val {
+	if res_coe > fp_coe_max_val {
 		return FixedPoint{
 			coe: 0,
 			exp: 0,
@@ -512,11 +540,11 @@ func (a *FixedPoint) Div(b *FixedPoint) FixedPoint {
 		}
 	}
 
-	// Pack the result.
-	resCoe := pack(resSign, resultCoeff)
 	return FixedPoint{
-		coe: resCoe,
-		exp: resExp,
+		sign: res_sign,
+		coe:  res_coe,
+		exp:  res_exp,
+		ctx:  a.ctx,
 	}
 }
 
@@ -526,68 +554,33 @@ func (a *FixedPoint) Neg() FixedPoint {
 		return invalid_operation()
 	}
 
-	s, abs := unpack(a.coe)
 	return FixedPoint{
-		coe: pack(-s, abs),
-		exp: a.exp,
+		sign: !a.sign,
+		coe:  a.coe,
+		exp:  a.exp,
+		ctx:  a.ctx,
 	}
 }
 
-// String returns the human-readable string representation of the FixedPoint.
-func (a *FixedPoint) String() string {
+// Abs returns the absolute value of the FixedPoint.
+func (a *FixedPoint) Abs() FixedPoint {
 	if a == nil {
-		return "NaN"
-	}
-	if a.flg.nan {
-		return "NaN"
-	}
-	if a.flg.inf {
-		sign, _ := unpack(a.coe)
-		if sign < 0 {
-			return "-Infinity"
-		}
-		return "Infinity"
+		return FixedPoint{flg: flags{nan: true, sig: SignalInvalidOperation}}
 	}
 
-	sign, abs := unpack(a.coe)
-
-	// Convert the absolute value to a string
-	str := fmt.Sprintf("%d", abs)
-
-	// Apply the exponent
-	exp := int(a.exp)
-	if exp >= 0 {
-		// Add trailing zeros
-		for range exp {
-			str += "0"
-		}
-	} else {
-		// Insert decimal point
-		expAbs := -exp
-		if len(str) <= expAbs {
-			// Need to pad with leading zeros
-			padding := expAbs - len(str)
-			str = "0." + strings.Repeat("0", padding) + str
-		} else {
-			// Insert decimal point at the correct position
-			pos := len(str) - expAbs
-			str = str[:pos] + "." + str[pos:]
-		}
-		// Trim trailing zeros after decimal point
-		str = strings.TrimRight(str, "0")
-		str = strings.TrimRight(str, ".")
+	if a.flg.nan || a.flg.inf {
+		// Preserve special values but make sign positive
+		result := *a
+		result.sign = false
+		return result
 	}
 
-	// Add sign
-	if sign < 0 {
-		str = "-" + str
+	return FixedPoint{
+		sign: false,
+		coe:  a.coe,
+		exp:  a.exp,
+		ctx:  a.ctx,
 	}
-
-	return str
-}
-
-func (f flags) String() string {
-	return fmt.Sprintf("flags{sig: %s, inf: %t, nan: %t}", f.sig, f.inf, f.nan)
 }
 
 // Equal returns true if this FixedPoint is equal to the other.
@@ -601,31 +594,25 @@ func (a *FixedPoint) Equal(b *FixedPoint) bool {
 		return false // NaN is not equal to anything
 	}
 	if a.flg.inf && b.flg.inf {
-		signA, _ := unpack(a.coe)
-		signB, _ := unpack(b.coe)
-		return signA == signB // Same infinity sign
+		return a.sign == b.sign // Same infinity sign
 	}
 	if a.flg.inf || b.flg.inf {
 		return false
 	}
 
-	// Normalize both values to compare
-	signA, absA := unpack(a.coe)
-	signB, absB := unpack(b.coe)
-
 	// Handle zero specially
-	if absA == 0 && absB == 0 {
+	if a.coe == 0 && b.coe == 0 {
 		return true // Both are zero (sign doesn't matter)
 	}
 
 	// If signs differ, they're not equal
-	if signA != signB {
+	if a.sign != b.sign {
 		return false
 	}
 
 	// If exponents are equal, just compare coefficients
 	if a.exp == b.exp {
-		return absA == absB
+		return a.coe == b.coe
 	}
 
 	// Need to align exponents to compare
@@ -634,15 +621,13 @@ func (a *FixedPoint) Equal(b *FixedPoint) bool {
 		if !ok {
 			return false
 		}
-		_, scaledAbs := unpack(scaledCoe)
-		return scaledAbs == absB
+		return scaledCoe == b.coe
 	} else {
 		scaledCoe, ok := scale_coe(b.coe, b.exp-a.exp)
 		if !ok {
 			return false
 		}
-		_, scaledAbs := unpack(scaledCoe)
-		return absA == scaledAbs
+		return a.coe == scaledCoe
 	}
 }
 
@@ -654,45 +639,37 @@ func (a *FixedPoint) LessThan(b *FixedPoint) bool {
 
 	// Handle infinities
 	if a.flg.inf {
-		signA, _ := unpack(a.coe)
-		return signA < 0 // -Infinity is less than anything except itself
+		return a.sign // -Infinity is less than anything except itself
 	}
 	if b.flg.inf {
-		signB, _ := unpack(b.coe)
-		return signB > 0 // Anything is less than +Infinity
+		return !b.sign // Anything is less than +Infinity
 	}
 
-	// Extract signs and absolute values
-	signA, absA := unpack(a.coe)
-	signB, absB := unpack(b.coe)
-
 	// If signs differ, negative < positive
-	if signA != signB {
-		return signA < signB
+	if a.sign != b.sign {
+		return a.sign
 	}
 
 	// Same sign, align exponents and compare
 	var cmpResult bool
 	if a.exp == b.exp {
-		cmpResult = absA < absB
+		cmpResult = a.coe < b.coe
 	} else if a.exp > b.exp {
 		scaledCoe, ok := scale_coe(a.coe, a.exp-b.exp)
 		if !ok {
-			return signA < 0 // Overflow means large number, sign determines result
+			return a.sign // Overflow means large number, sign determines result
 		}
-		_, scaledAbs := unpack(scaledCoe)
-		cmpResult = scaledAbs < absB
+		cmpResult = scaledCoe < b.coe
 	} else {
 		scaledCoe, ok := scale_coe(b.coe, b.exp-a.exp)
 		if !ok {
-			return signA > 0 // Overflow means large number, sign determines result
+			return !a.sign // Overflow means large number, sign determines result
 		}
-		_, scaledAbs := unpack(scaledCoe)
-		cmpResult = absA < scaledAbs
+		cmpResult = a.coe < scaledCoe
 	}
 
 	// If negative, reverse comparison result
-	if signA < 0 {
+	if a.sign {
 		return !cmpResult
 	}
 	return cmpResult
@@ -742,31 +719,6 @@ func Min(a, b *FixedPoint) *FixedPoint {
 	return a
 }
 
-// Abs returns the absolute value of the FixedPoint.
-func (a *FixedPoint) Abs() FixedPoint {
-	if a == nil {
-		return FixedPoint{flg: flags{nan: true, sig: SignalInvalidOperation}}
-	}
-
-	if a.flg.nan || a.flg.inf {
-		// Preserve special values but make sign positive
-		result := *a
-		_, abs := unpack(a.coe)
-		result.coe = pack(1, abs)
-		return result
-	}
-
-	_, abs := unpack(a.coe)
-	return FixedPoint{
-		coe: pack(1, abs),
-		exp: a.exp,
-	}
-}
-
-type signed interface {
-	int | int8 | int16 | int32 | int64 | exponent
-}
-
 func invalid_operation() FixedPoint {
 	return FixedPoint{
 		coe: 0,
@@ -783,88 +735,39 @@ func overflow_operation() FixedPoint {
 	}
 }
 
-func convert_signed[I signed](x I) (coefficient, bool) {
-	var sign uint64
-	var abs uint64
-	v := int64(x)
-
-	if v < 0 {
-		sign = 1
-		// Compute absolute value using bitwise complement plus one,
-		// which correctly handles v == math.MinInt64.
-		abs = uint64(^v) + 1
-	} else {
-		abs = uint64(v)
-	}
-
-	// Check for overflow
-	ok := abs <= fp_coe_max_val
-
-	// Ensure the sign bit (bit 63) is set appropriately.
-	return coefficient((sign << 63) | (abs & 0x7FFFFFFFFFFFFFFF)), ok
-}
-
-func pack(s int8, abs uint64) coefficient {
-	var signBit uint64
-	if s < 0 {
-		signBit = 1
-	}
-
-	return coefficient((signBit << 63) | (abs & 0x7FFFFFFFFFFFFFFF))
-}
-
-func unpack(c coefficient) (int8, uint64) {
-	var sign int8
-	var abs uint64
-
-	// Extract the sign bit (bit 63).
-	if c&(1<<63) != 0 {
-		sign = -1
-	} else {
-		sign = 1
-	}
-
-	// Extract the absolute value (lower 63 bits).
-	abs = uint64(c & 0x7FFFFFFFFFFFFFFF)
-
-	// Return the signed value.
-	return sign, uint64(abs)
-}
-
 // scale_coe always adjusts the coefficient to the desired exponent without losing precision.
 func scale_coe(c coefficient, diff exponent) (coefficient, bool) {
-	s, abs := unpack(c)
 	if diff > 0 {
 		// Multiply absolute value by 10 for each increment in diff.
 		for i := exponent(0); i < diff; i++ {
 			// Check for multiplication overflow.
-			if abs > fp_coe_max_val/10 {
+			if c > fp_coe_max_val/10 {
 				return 0, false
 			}
-			abs *= 10
+			c *= 10
 		}
 	} else if diff < 0 {
 		// Divide absolute value by 10 for each decrement in diff,
 		// ensuring no remainder is lost.
 		for i := diff; i < 0; i++ {
-			if abs%10 != 0 {
+			if c%10 != 0 {
 				return 0, false
 			}
-			abs /= 10
+			c /= 10
 		}
 	}
-	return pack(s, abs), true
+	return c, true
 }
 
-func safe_add(x, y uint64) (uint64, bool) {
-	if x > fp_coe_max_val-y {
+func safe_add[C ~uint64](x, y C) (C, bool) {
+	if x > C(fp_coe_max_val)-y {
 		return 0, false
 	}
 
 	return x + y, true
 }
 
-func safe_sub(x, y uint64) (uint64, bool) {
+func safe_sub[C ~uint64](x, y C) (C, bool) {
 	if x < y {
 		return 0, false
 	}

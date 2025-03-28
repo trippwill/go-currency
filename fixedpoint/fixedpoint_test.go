@@ -19,7 +19,6 @@ func TestNewFixedPoint(t *testing.T) {
 		{"with_exp_positive", 42, 2, "4200", false},
 		{"with_exp_negative", 42, -2, "0.42", false},
 		{"large_value", 999999999999999999, 0, "999999999999999999", false},
-		{"overflow", 1000000000000000000, 0, "NaN", true},
 	}
 
 	for _, tt := range tests {
@@ -55,7 +54,7 @@ func TestParse(t *testing.T) {
 		{"empty_string", "", "NaN", SignalInvalidOperation},
 		{"non_numeric", "abc", "NaN", SignalInvalidOperation},
 		{"large_value", "999999999999999999", "999999999999999999", 0},
-		{"overflow", "1000000000000000000", "Infinity", SignalOverflow},
+		{"overflow", "10000000000000000000", "Infinity", SignalOverflow},
 	}
 
 	for _, tt := range tests {
@@ -87,7 +86,7 @@ func TestFixedPoint_Add(t *testing.T) {
 		{"mixed_exponents", "42.5", "7.05", "49.55"},
 		{"very_small_numbers", "0.000001", "0.000002", "0.000003"},
 		{"large_valid_sum", "999999999999999990", "9", "999999999999999999"},
-		{"overflow", "999999999999999999", "1", "Infinity"},
+		{"overflow", "9999999999999999999", "1", "Infinity"},
 	}
 
 	for _, tt := range tests {
@@ -163,7 +162,7 @@ func TestFixedPoint_Mul(t *testing.T) {
 		{"negative_mul_negative", "-42", "-10", "420", false},
 		{"decimal_mul_decimal", "4.2", "0.1", "0.42", false},
 		{"large_valid_product", "999999999", "999999999", "999999998000000001", false},
-		{"overflow", "999999999999999999", "2", "Infinity", true},
+		{"overflow", "9999999999999999999", "2", "Infinity", true},
 	}
 
 	for _, tt := range tests {
@@ -197,7 +196,7 @@ func TestFixedPoint_Div(t *testing.T) {
 		{"positive_div_negative", "420", "-10", "-42", 0},
 		{"negative_div_negative", "-420", "-10", "42", 0},
 		{"decimal_div_integer", "4.2", "2", "2.1", 0},
-		{"repeating_decimal", "1", "3", "0.333333333333333333", 0},
+		{"repeating_decimal", "1", "3", "0.3333333333333333333", 0},
 	}
 
 	for _, tt := range tests {
@@ -260,8 +259,8 @@ func TestFixedPoint_String(t *testing.T) {
 		{"negative_exp", New(42, -2), "0.42"},
 		{"very_negative_exp", New(42, -4), "0.0042"},
 		{"special_nan", FixedPoint{flg: flags{nan: true}}, "NaN"},
-		{"special_pos_inf", FixedPoint{flg: flags{inf: true}, coe: pack(1, 0)}, "Infinity"},
-		{"special_neg_inf", FixedPoint{flg: flags{inf: true}, coe: pack(-1, 0)}, "-Infinity"},
+		{"special_pos_inf", FixedPoint{flg: flags{inf: true}}, "Infinity"},
+		{"special_neg_inf", FixedPoint{sign: true, flg: flags{inf: true}}, "-Infinity"},
 	}
 
 	for _, tt := range tests {
@@ -452,7 +451,7 @@ func TestFixedPoint_Handle(t *testing.T) {
 	invalid := Parse("")
 	handled := invalid.Handle(func(s Signal) *FixedPoint {
 		// Return a valid FixedPoint (42)
-		return &FixedPoint{coe: pack(1, 42), exp: 0, flg: flags{sig: 0}}
+		return &FixedPoint{coe: 42, exp: 0, flg: flags{sig: 0}}
 	})
 	if handled.String() != "42" {
 		t.Error("Handle did not override invalid FixedPoint as expected")
@@ -478,7 +477,7 @@ func TestFixedPoint_Clone(t *testing.T) {
 func TestFixedPoint_Debug(t *testing.T) {
 	fp := Parse("42.5")
 	dbg := fp.Debug()
-	if !strings.Contains(dbg, "sign:") || !strings.Contains(dbg, "abs:") || !strings.Contains(dbg, "exp:") {
+	if !strings.Contains(dbg, "sign:") || !strings.Contains(dbg, "coe:") || !strings.Contains(dbg, "exp:") {
 		t.Errorf("Debug() output unexpected: %s", dbg)
 	}
 }

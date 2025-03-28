@@ -60,4 +60,13 @@ func main() {
 	println(b.String(), "\t", b.Debug())
 	println(c.String(), "\t", c.Debug())
 	println("--------------------")
+
+	x := new(fp.FixedPoint).Init(false, 10000000000000000000, -12)
+	y := new(fp.FixedPoint).Parse("-0.00000012345")
+	z := fp.Must(x.Add(y)).SetContext(4, fp.RoundingNegativeInf)
+
+	println(x.String(), "\t", x.Debug())
+	println(y.String(), "\t", y.Debug())
+	println(z.String(), "\t", z.Debug())
+	println("--------------------")
 }
