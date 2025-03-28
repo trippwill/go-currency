@@ -1,11 +1,12 @@
 package currency
 
 import (
+	fp "github.com/trippwill/go-currency/fixedpoint"
 	"golang.org/x/text/language"
 )
 
 type Amount[C Currency] struct {
-	//	Value    fp.FixedPoint
+	Value    *fp.FixedPoint
 	Currency C
 }
 
@@ -17,56 +18,72 @@ func (a Amount[C]) String() string {
 	return a.Format(language.Tag{})
 }
 
-// func (a Amount[C]) Add(b Amount[C]) Amount[C] {
-// 	// return Amount[C]{
-// 	// 	Value:    a.Value.Add(b.Value),
-// 	// 	Currency: a.Currency,
-// 	// }
-// }
+func (a Amount[C]) Add(b Amount[C]) Amount[C] {
+	sum := a.Value.Add(b.Value)
+	return Amount[C]{
+		Value:    &sum,
+		Currency: a.Currency,
+	}
+}
 
 func (a Amount[C]) Sub(b Amount[C]) Amount[C] {
-	panic("not implemented")
+	diff := a.Value.Sub(b.Value)
+	return Amount[C]{
+		Value:    &diff,
+		Currency: a.Currency,
+	}
 }
 
-// func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
-// 	panic("not implemented")
-// }
+func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
+	product := a.Value.Mul(&factor)
+	return Amount[C]{
+		Value:    &product,
+		Currency: a.Currency,
+	}
+}
 
-// func (a Amount[C]) Div(divisor fp.FixedPoint) (res Amount[C], err error) {
-// 	panic("not implemented")
-// }
+func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
+	quotient := a.Value.Div(&divisor)
+	return Amount[C]{
+		Value:    &quotient,
+		Currency: a.Currency,
+	}, nil
+}
 
-// Neg returns the negation of the amount.
 func (a Amount[C]) Neg() Amount[C] {
-	panic("not implemented")
+	negated := a.Value.Neg()
+	return Amount[C]{
+		Value:    &negated,
+		Currency: a.Currency,
+	}
 }
 
-// Abs returns the absolute value of the amount.
 func (a Amount[C]) Abs() Amount[C] {
-	panic("not implemented")
+	absVal := a.Value.Abs()
+	return Amount[C]{
+		Value:    &absVal,
+		Currency: a.Currency,
+	}
 }
 
-// IsZero returns true if the amount is zero.
 func (a Amount[C]) IsZero() bool {
-	panic("not implemented")
+	return a.Value.IsZero()
 }
 
-// Equal compares two amounts for equality after normalizing precision.
-// It returns false if the currencies differ.
 func (a Amount[C]) Equal(b Amount[C]) bool {
-	return false
+	return a.Value.Equal(b.Value)
 }
 
-// func Convert[C, D Currency](a Amount[C], factor fp.FixedPoint) Amount[D] {
-// 	// Convert the amount using the conversion factor
-// 	converted := a.Mul(factor)
+func Convert[C, D Currency](a Amount[C], factor fp.FixedPoint) Amount[D] {
+	// Convert the amount using the conversion factor
+	converted := a.Mul(factor)
 
-// 	// Initialize the new currency type D
-// 	var d D
+	// Initialize the new currency type D
+	var d D
 
-// 	// Build the converted Amount with currency type D
-// 	return Amount[D]{
-// 		Value:    converted.Value,
-// 		Currency: d,
-// 	}
-// }
+	// Build the converted Amount with currency type D
+	return Amount[D]{
+		Value:    converted.Value,
+		Currency: d,
+	}
+}

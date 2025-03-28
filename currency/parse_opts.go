@@ -16,8 +16,8 @@ func (po *ParseOpts) Init(thousands, decimal rune) *ParseOpts {
 }
 
 type ParseError struct {
-	Input string
 	Inner error
+	Input string
 }
 
 func (pe ParseError) Error() string {
