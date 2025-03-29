@@ -1,31 +1,25 @@
 package fixedpoint
 
 const (
-	RoundingNearestEven Rounding = iota
-	RoundingNearestAway
-	RoundingZero
-	RoundingPositiveInf
-	RoundingNegativeInf
-	RoundingPositiveZero
-	RoundingNegativeZero
+	RoundHalfUp Rounding = iota
+	RoundHalfEven
+	RoundDown
+	RoundCeiling
+	RoundFloor
 )
 
 func (r Rounding) Debug() string {
 	switch r {
-	case RoundingNearestEven:
-		return "NE"
-	case RoundingNearestAway:
-		return "NA"
-	case RoundingZero:
-		return "Z"
-	case RoundingPositiveInf:
-		return "+Inf"
-	case RoundingNegativeInf:
-		return "-Inf"
-	case RoundingPositiveZero:
-		return "+Z"
-	case RoundingNegativeZero:
-		return "-Z"
+	case RoundHalfUp:
+		return "HU"
+	case RoundHalfEven:
+		return "HE"
+	case RoundDown:
+		return "D"
+	case RoundCeiling:
+		return "C"
+	case RoundFloor:
+		return "F"
 	default:
 		return "?(0x" + r.String() + ")"
 	}
@@ -33,20 +27,16 @@ func (r Rounding) Debug() string {
 
 func (r Rounding) String() string {
 	switch r {
-	case RoundingNearestEven:
-		return "RoundingNearestEven"
-	case RoundingNearestAway:
-		return "RoundingNearestAway"
-	case RoundingZero:
-		return "RoundingZero"
-	case RoundingPositiveInf:
-		return "RoundingPositiveInf"
-	case RoundingNegativeInf:
-		return "RoundingNegativeInf"
-	case RoundingPositiveZero:
-		return "RoundingPositiveZero"
-	case RoundingNegativeZero:
-		return "RoundingNegativeZero"
+	case RoundHalfUp:
+		return "RoundHalfUp"
+	case RoundHalfEven:
+		return "RoundHalfEven"
+	case RoundDown:
+		return "RoundDown"
+	case RoundCeiling:
+		return "RoundCeiling"
+	case RoundFloor:
+		return "RoundFloor"
 	default:
 		return "Rounding(0x" + r.String() + ")"
 	}

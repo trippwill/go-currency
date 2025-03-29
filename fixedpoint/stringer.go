@@ -2,87 +2,114 @@ package fixedpoint
 
 import (
 	"fmt"
-	"strings"
 )
 
 // Debug returns a formatted string with debug information about the FixedPoint.
-func (a *FixedPoint) Debug() string {
+func (a *FiniteNumber) Debug() string {
 	sign := '+'
 	if a.sign {
 		sign = '-'
 	}
 	return fmt.Sprintf(
-		"fp{sign: %c, coe: %d, exp: %d, flg: %s, ctx: %s}",
+		"fn{sign: %c, coe: %d, exp: %d, ctx: %s}",
 		sign,
 		a.coe,
 		a.exp,
-		a.flg.Debug(),
-		a.ctx.Debug())
+		a.context.Debug())
 }
 
-// String returns the human-readable string representation of the FixedPoint.
-func (a *FixedPoint) String() string {
-	if a == nil {
-		return "NaN"
-	}
-	if a.flg.nan {
-		return "NaN"
-	}
-	if a.flg.inf {
-		if a.sign {
-			return "-Infinity"
-		}
-		return "Infinity"
-	}
-
-	// Convert the absolute value to a string
-	str := fmt.Sprintf("%d", a.coe)
-
-	// Apply the exponent
-	exp := int(a.exp)
-	if exp >= 0 {
-		// Add trailing zeros
-		for range exp {
-			str += "0"
-		}
-	} else {
-		// Insert decimal point
-		expAbs := -exp
-		if len(str) <= expAbs {
-			// Need to pad with leading zeros
-			padding := expAbs - len(str)
-			str = "0." + strings.Repeat("0", padding) + str
-		} else {
-			// Insert decimal point at the correct position
-			pos := len(str) - expAbs
-			str = str[:pos] + "." + str[pos:]
-		}
-		// Trim trailing zeros after decimal point
-		str = strings.TrimRight(str, "0")
-		str = strings.TrimRight(str, ".")
-	}
-
-	// Add sign
+// Debug returns a formatted string with debug information about the Infinity.
+func (a *Infinity) Debug() string {
+	sign := '+'
 	if a.sign {
-		str = "-" + str
+		sign = '-'
 	}
-
-	return str
+	return fmt.Sprintf(
+		"inf{sign: %c, ctx: %s}",
+		sign,
+		a.context.Debug())
 }
 
-func (f flags) String() string {
-	return fmt.Sprintf("f{s: %s, i: %t, n: %t}", f.sig, f.inf, f.nan)
+func (a *NaN) Debug() string {
+	sign := '+'
+	if a.sign {
+		sign = '-'
+	}
+
+	if diagnostic, ok := DecodePayload(a.diag); ok {
+		return fmt.Sprintf(
+			"nan{sign: %c, signal: %s, diag: %v}",
+			sign,
+			a.context.signal,
+			diagnostic)
+	}
+
+	return fmt.Sprintf(
+		"nan{sign: %c, signal: %s, diag: %d}",
+		sign,
+		a.context.signal,
+		a.diag)
 }
 
-func (f flags) Debug() string {
-	fs := f.sig.Debug()
-	if f.inf {
-		fs += ":INF"
+// String returns a string representation as a decimal number.
+// It formats the number according to the context's precision and rounding mode.
+func (a *FiniteNumber) String() string {
+	if a.IsZero() {
+		return "0"
 	}
-	if f.nan {
-		fs += ":NAN"
+
+	// Use a separate sign string.
+	sign := ""
+	if a.sign {
+		sign = "-"
 	}
-	return fs
+
+	// Convert coefficient to string.
+	coe_str := fmt.Sprintf("%d", a.coe)
+
+	// If the exponent is zero or positive, pad with trailing zeros.
+	if a.exp >= 0 {
+		// Append a.exp zeros to the coefficient string.
+		for range int(a.exp) {
+			coe_str += "0"
+		}
+		return sign + coe_str
+	}
+
+	// For a negative exponent, insert a decimal point.
+	// Let d be the number of digits after the decimal point.
+	d := int(-a.exp)
+
+	// If the coefficient string has fewer digits than required, pad with leading zeros.
+	if len(coe_str) <= d {
+		zeros := ""
+		for range d - len(coe_str) {
+			zeros += "0"
+		}
+		return sign + "0." + zeros + coe_str
+	}
+
+	// Otherwise, insert the decimal point at the correct location.
+	int_part := coe_str[:len(coe_str)-d]
+	frac_part := coe_str[len(coe_str)-d:]
+	return sign + int_part + "." + frac_part
+}
+
+// String returns a string representation of the Infinity.
+func (a *Infinity) String() string {
+	if a.sign {
+		return "-Infinity"
+	}
+	return "Infinity"
+}
+
+// String returns a string representation of the NaN.
+func (a *NaN) String() string {
+	sign := '+'
+	if a.sign {
+		sign = '-'
+	}
+	return fmt.Sprintf("%cNaN{%s}:%v", sign, a.context.signal, a.diag)
 }
 
 func (c context) Debug() string {
