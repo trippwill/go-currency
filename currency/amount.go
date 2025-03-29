@@ -6,7 +6,7 @@ import (
 )
 
 type Amount[C Currency] struct {
-	Value    *fp.FixedPoint
+	Value    fp.FixedPoint
 	Currency C
 }
 
@@ -21,7 +21,7 @@ func (a Amount[C]) String() string {
 func (a Amount[C]) Add(b Amount[C]) Amount[C] {
 	sum := a.Value.Add(b.Value)
 	return Amount[C]{
-		Value:    &sum,
+		Value:    sum,
 		Currency: a.Currency,
 	}
 }
@@ -29,23 +29,23 @@ func (a Amount[C]) Add(b Amount[C]) Amount[C] {
 func (a Amount[C]) Sub(b Amount[C]) Amount[C] {
 	diff := a.Value.Sub(b.Value)
 	return Amount[C]{
-		Value:    &diff,
+		Value:    diff,
 		Currency: a.Currency,
 	}
 }
 
 func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
-	product := a.Value.Mul(&factor)
+	product := a.Value.Mul(factor)
 	return Amount[C]{
-		Value:    &product,
+		Value:    product,
 		Currency: a.Currency,
 	}
 }
 
 func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
-	quotient := a.Value.Div(&divisor)
+	quotient := a.Value.Div(divisor)
 	return Amount[C]{
-		Value:    &quotient,
+		Value:    quotient,
 		Currency: a.Currency,
 	}, nil
 }
@@ -53,7 +53,7 @@ func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
 func (a Amount[C]) Neg() Amount[C] {
 	negated := a.Value.Neg()
 	return Amount[C]{
-		Value:    &negated,
+		Value:    negated,
 		Currency: a.Currency,
 	}
 }
@@ -61,7 +61,7 @@ func (a Amount[C]) Neg() Amount[C] {
 func (a Amount[C]) Abs() Amount[C] {
 	absVal := a.Value.Abs()
 	return Amount[C]{
-		Value:    &absVal,
+		Value:    absVal,
 		Currency: a.Currency,
 	}
 }
@@ -71,7 +71,7 @@ func (a Amount[C]) IsZero() bool {
 }
 
 func (a Amount[C]) Equal(b Amount[C]) bool {
-	return a.Value.Equal(b.Value)
+	return fp.Equals(a.Value, b.Value)
 }
 
 func Convert[C, D Currency](a Amount[C], factor fp.FixedPoint) Amount[D] {
