@@ -34,8 +34,8 @@ func TestFiniteNumberSub(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected FiniteNumber, got %T", res)
 	}
-	if fn.coe != 100 {
-		t.Errorf("expected coefficient 100, got %d", fn.coe)
+	if fn.coe != 1 {
+		t.Errorf("expected coefficient 1, got %d", fn.coe)
 	}
 }
 
@@ -49,8 +49,8 @@ func TestFiniteNumberMul(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected FiniteNumber, got %T", res)
 	}
-	if fn.coe != 200 {
-		t.Errorf("expected coefficient 200, got %d", fn.coe)
+	if fn.coe != 2 {
+		t.Errorf("expected coefficient 2, got %d", fn.coe)
 	}
 }
 

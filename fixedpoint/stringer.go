@@ -2,6 +2,7 @@ package fixedpoint
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Debug returns a formatted string with debug information about the FixedPoint.
@@ -58,41 +59,43 @@ func (a *FiniteNumber) String() string {
 		return "0"
 	}
 
-	// Use a separate sign string.
 	sign := ""
 	if a.sign {
 		sign = "-"
 	}
 
-	// Convert coefficient to string.
+	prec := int(a.context.precision)
 	coe_str := fmt.Sprintf("%d", a.coe)
 
-	// If the exponent is zero or positive, pad with trailing zeros.
 	if a.exp >= 0 {
-		// Append a.exp zeros to the coefficient string.
-		for range int(a.exp) {
-			coe_str += "0"
+		coe_str += strings.Repeat("0", int(a.exp))
+		if prec > 0 {
+			frac := strings.Repeat("0", prec)
+			return sign + coe_str + "." + frac
 		}
 		return sign + coe_str
 	}
 
-	// For a negative exponent, insert a decimal point.
-	// Let d be the number of digits after the decimal point.
-	d := int(-a.exp)
-
-	// If the coefficient string has fewer digits than required, pad with leading zeros.
-	if len(coe_str) <= d {
-		zeros := ""
-		for range d - len(coe_str) {
-			zeros += "0"
-		}
-		return sign + "0." + zeros + coe_str
+	pos := len(coe_str) + int(a.exp)
+	var int_part, frac_part string
+	if pos <= 0 {
+		int_part = "0"
+		frac_part = strings.Repeat("0", -pos) + coe_str
+	} else {
+		int_part = coe_str[:pos]
+		frac_part = coe_str[pos:]
 	}
 
-	// Otherwise, insert the decimal point at the correct location.
-	int_part := coe_str[:len(coe_str)-d]
-	frac_part := coe_str[len(coe_str)-d:]
-	return sign + int_part + "." + frac_part
+	if len(frac_part) > prec {
+		frac_part = frac_part[:prec]
+	} else {
+		frac_part += strings.Repeat("0", prec-len(frac_part))
+	}
+
+	if prec > 0 {
+		return sign + int_part + "." + frac_part
+	}
+	return sign + int_part
 }
 
 // String returns a string representation of the Infinity.

@@ -1,6 +1,7 @@
 package fixedpoint
 
 import (
+	"math"
 	"strconv"
 )
 
@@ -40,7 +41,6 @@ func (a *FiniteNumber) Add(right FixedPoint) FixedPoint {
 		return b.Add(a)
 
 	case *FiniteNumber:
-
 		// Align exponents: choose the smaller exponent for maximum precision.
 		min_exp := min(b.exp, a.exp)
 
@@ -77,17 +77,16 @@ func (a *FiniteNumber) Add(right FixedPoint) FixedPoint {
 		}
 
 		// Overflow during addition or subtraction.
-		if !ok {
+		if !ok || res_coe_overflow(res_coe) {
 			return overflow_operation()
 		}
 
-		// Check coefficient against maximum allowed value.
-		if res_coe > fp_coe_max_val {
-			return overflow_operation()
-		}
-
-		result := new(FiniteNumber).Init(res_sign, res_coe, min_exp, a.context)
-		return apply_rounding(result)
+		return apply_rounding(
+			new(FiniteNumber).Init(
+				res_sign,
+				res_coe,
+				min_exp,
+				a.context))
 	}
 
 	panic(a)
@@ -228,6 +227,9 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 	}
 
 	switch b := right.(type) {
+	case *Infinity:
+		return Zero.Clone()
+
 	case *FiniteNumber:
 		if b.coe == 0 {
 			if a.coe == 0 {
@@ -239,20 +241,23 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 		// Perform division with scaling to maintain precision
 		dividend := a.coe
 		divisor := b.coe
-		expAdjust := int(a.exp - b.exp)
+		adjust := int(a.exp - b.exp)
 
 		// Scale dividend to maintain maximum precision
 		// Use max precision based on coefficient limits
-		maxScaleFactor := fp_coe_max_val / dividend
-		scaleFactor := coefficient(1)
+		scale_factor := coefficient(1)
+		max_scale := fp_coe_max_val / divisor
 
 		// Scale up dividend as much as possible without overflow
-		for scaleFactor < maxScaleFactor && scaleFactor < 1000000 { // Reasonable limit for scaling
-			scaleFactor *= 10
-			expAdjust--
+		for scale_factor < coefficient(math.Pow10(int(a.precision))) && scale_factor < max_scale { // Reasonable limit for scaling
+			scale_factor *= 10
+			adjust--
 		}
 
-		dividend *= scaleFactor
+		dividend, ok := safe_mul(dividend, scale_factor)
+		if !ok {
+			return overflow_operation()
+		}
 
 		quotient := dividend / divisor
 		remainder := dividend % divisor
@@ -261,30 +266,45 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 		if remainder != 0 {
 			// Default to round half up if no specific rounding mode in context
 			// In a real implementation, check context.rounding here
-			if remainder*2 >= divisor {
-				if quotient < fp_coe_max_val {
+			switch a.context.rounding {
+			case RoundHalfUp:
+				if remainder*2 >= divisor {
 					quotient++
-				} else {
-					return overflow_operation()
+				}
+			case RoundHalfEven:
+				if remainder*2 > divisor {
+					quotient++
+				}
+				if remainder*2 == divisor && quotient%2 == 1 {
+					quotient++
+				}
+			case RoundDown:
+				// Truncate
+			case RoundCeiling:
+				if !a.sign && remainder != 0 {
+					quotient++
+				}
+			case RoundFloor:
+				if a.sign && remainder != 0 {
+					quotient++
+				}
+			default:
+				if remainder*2 >= divisor {
+					quotient++
 				}
 			}
-		}
-
-		// Normalize result
-		for quotient > 0 && quotient%10 == 0 {
-			quotient /= 10
-			expAdjust++
 		}
 
 		if quotient > fp_coe_max_val {
 			return overflow_operation()
 		}
 
-		result := new(FiniteNumber).Init(a.sign != b.sign, coefficient(quotient), exponent(expAdjust), a.context)
-		return apply_rounding(result)
-
-	case *Infinity:
-		return Zero.Clone()
+		return apply_rounding(
+			new(FiniteNumber).Init(
+				a.sign != b.sign,
+				coefficient(quotient),
+				exponent(adjust),
+				a.context))
 	}
 
 	panic(a)
@@ -461,11 +481,11 @@ func (a *NaN) Compare(b FixedPoint) int {
 }
 
 func invalid_operation() FixedPoint {
-	return new(NaN).Init(SignalInvalidOperation, 2)
+	return new(NaN).Init(SignalInvalidOperation, 3)
 }
 
 func overflow_operation() FixedPoint {
-	return new(NaN).Init(SignalOverflow, 2)
+	return new(NaN).Init(SignalOverflow, 3)
 }
 
 // scale_coe always adjusts the coefficient to the desired exponent without losing precision.
@@ -553,54 +573,110 @@ func val_operands(a FixedPoint, b FixedPoint) (FixedPoint, bool) {
 }
 
 // New helper: apply_rounding rounds a FiniteNumber based on context.precision and context.rounding.
-func apply_rounding(fn *FiniteNumber) *FiniteNumber {
-	s := strconv.FormatUint(uint64(fn.coe), 10)
-	digits := len(s)
+func apply_rounding(fn *FiniteNumber) FixedPoint {
+	digits := dlen(fn.coe)
 	prec := int(fn.context.precision)
-	if digits <= prec {
-		return fn
-	}
+	if digits > prec {
 
-	drop := digits - prec
-	divisor := uint64(1)
-	for range drop {
-		divisor *= 10
-	}
-
-	quotient := fn.coe / coefficient(divisor)
-	remainder := fn.coe % coefficient(divisor)
-
-	switch fn.context.rounding {
-	case RoundHalfUp:
-		if uint64(remainder)*2 >= divisor {
-			quotient++
+		drop := digits - prec
+		divisor := uint64(1)
+		for range drop {
+			divisor *= 10
 		}
-	case RoundHalfEven:
-		if uint64(remainder)*2 > divisor {
-			quotient++
-		} else if uint64(remainder)*2 == divisor {
-			if quotient%2 == 1 {
+
+		quotient := fn.coe / coefficient(divisor)
+		remainder := fn.coe % coefficient(divisor)
+
+		switch fn.context.rounding {
+		case RoundHalfUp:
+			if uint64(remainder)*2 >= divisor {
+				quotient++
+			}
+		case RoundHalfEven:
+			if uint64(remainder)*2 > divisor {
+				quotient++
+			} else if uint64(remainder)*2 == divisor {
+				if quotient%2 == 1 {
+					quotient++
+				}
+			}
+		case RoundDown:
+			// truncate
+		case RoundCeiling:
+			if !fn.sign && remainder != 0 {
+				quotient++
+			}
+		case RoundFloor:
+			if fn.sign && remainder != 0 {
+				quotient++
+			}
+		default:
+			if uint64(remainder)*2 >= divisor {
 				quotient++
 			}
 		}
-	case RoundDown:
-		// truncate
-	case RoundCeiling:
-		if !fn.sign && remainder != 0 {
-			quotient++
-		}
-	case RoundFloor:
-		if fn.sign && remainder != 0 {
-			quotient++
-		}
-	default:
-		if uint64(remainder)*2 >= divisor {
-			quotient++
-		}
+		new_exp := fn.exp + exponent(drop)
+		fn.coe = quotient
+		fn.exp = new_exp
 	}
-	new_exp := fn.exp + exponent(drop)
-	fn.coe = quotient
-	fn.exp = new_exp
+
+	// Check for overflow after rounding
+	if res_coe_overflow(fn.coe) {
+		return overflow_operation()
+	}
+
+	// Normalize result
+	for fn.coe > 0 && fn.coe%10 == 0 {
+		fn.coe /= 10
+		fn.exp++
+	}
 
 	return fn
+}
+
+func dlen[C ~uint64](c C) int {
+	switch {
+	case c == 0:
+		return 1
+	case c < 10:
+		return 1
+	case c < 100:
+		return 2
+	case c < 1000:
+		return 3
+	case c < 10000:
+		return 4
+	case c < 100000:
+		return 5
+	case c < 1000000:
+		return 6
+	case c < 10000000:
+		return 7
+	case c < 100000000:
+		return 8
+	case c < 1000000000:
+		return 9
+	case c < 10000000000:
+		return 10
+	case c < 100000000000:
+		return 11
+	case c < 1000000000000:
+		return 12
+	case c < 10000000000000:
+		return 13
+	case c < 100000000000000:
+		return 14
+	case c < 1000000000000000:
+		return 15
+	case c < 10000000000000000:
+		return 16
+	case c < 100000000000000000:
+		return 17
+	case c < 1000000000000000000:
+		return 18
+	case c < 10000000000000000000:
+		return 19
+	}
+
+	return len(strconv.FormatUint(uint64(c), 10))
 }

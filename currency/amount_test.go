@@ -54,8 +54,8 @@ func BenchmarkAdd(b *testing.B) {
 	amt := Amount[testCurrency]{Value: val2, Currency: testCurrency{}}
 
 	// Fix: replace b.Loop() with b.ResetTimer() and a proper loop.
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for b.Loop() {
 		_ = a.Add(amt)
 	}
 }
