@@ -572,12 +572,42 @@ func val_operands(a FixedPoint, b FixedPoint) (FixedPoint, bool) {
 	return nil, true
 }
 
-// New helper: apply_rounding rounds a FiniteNumber based on context.precision and context.rounding.
+// apply_rounding rounds a FiniteNumber based on context.precision and context.rounding.
+// the resulting coefficient is adjusted to the desired precision.
 func apply_rounding(fn *FiniteNumber) FixedPoint {
 	digits := dlen(fn.coe)
 	prec := int(fn.context.precision)
-	if digits > prec {
+	if digits == prec {
+		return fn
+	}
 
+	switch {
+	case digits == 0:
+		// If the coefficient is zero, no rounding is needed.
+		return fn
+	case digits == prec:
+		// If the number of digits is equal to precision, no rounding is needed.
+		return fn
+	case digits < prec:
+		// If the number of digits is less than precision, scale up.
+		required_mult := coefficient(1)
+		diff := prec - digits
+		// Scale up the coefficient by 10^(prec - digits)
+		for range diff {
+			if fn.coe > fp_coe_max_val/10 {
+				return fn
+			}
+			required_mult *= 10
+		}
+
+		if res_coe, ok := safe_mul(fn.coe, required_mult); ok {
+			fn.coe = res_coe
+			fn.exp -= exponent(diff)
+		}
+
+		return fn
+	case digits > prec:
+		// If the number of digits is greater than precision, scale down.
 		drop := digits - prec
 		divisor := uint64(1)
 		for range drop {
@@ -615,23 +645,15 @@ func apply_rounding(fn *FiniteNumber) FixedPoint {
 				quotient++
 			}
 		}
+
 		new_exp := fn.exp + exponent(drop)
 		fn.coe = quotient
 		fn.exp = new_exp
+
+		return fn
 	}
 
-	// Check for overflow after rounding
-	if res_coe_overflow(fn.coe) {
-		return overflow_operation()
-	}
-
-	// Normalize result
-	for fn.coe > 0 && fn.coe%10 == 0 {
-		fn.coe /= 10
-		fn.exp++
-	}
-
-	return fn
+	panic(fn)
 }
 
 func dlen[C ~uint64](c C) int {

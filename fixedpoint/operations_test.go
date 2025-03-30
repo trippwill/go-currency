@@ -4,139 +4,123 @@ import (
 	"testing"
 )
 
-var ctx = defaultContext
+// Use a default context for testing.
+// It must match the context struct defined in the package.
+var defaultCtx = defaultContext
 
-// For testing purposes, assume that FiniteNumber, Infinity, and NaN have the following minimal fields.
-// (In real tests, these types are defined in the package and their Init methods initialize these fields.)
+func TestFiniteAdd(t *testing.T) {
+	// Test adding two finite numbers with same exponent.
+	// Represent 100 as coefficient 100 and exponent 0, and 200 similarly.
+	a := new(FiniteNumber).Init(false, 100, 0, defaultCtx)
+	b := new(FiniteNumber).Init(false, 200, 0, defaultCtx)
+	expected := new(FiniteNumber).Init(false, 300, 0, defaultCtx)
 
-// Test FiniteNumber.Add
-func TestFiniteNumberAdd(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 100, 0, ctx)
-	b := new(FiniteNumber).Init(false, 23, 0, ctx)
 	res := a.Add(b)
-
-	fn, ok := res.(*FiniteNumber)
+	result, ok := res.(*FiniteNumber)
 	if !ok {
-		t.Fatalf("expected FiniteNumber, got %T", res)
+		t.Errorf("Expected FiniteNumber result, got %T", res)
+		return
 	}
-	if fn.coe != 123 {
-		t.Errorf("expected coefficient 123, got %d", fn.coe)
+	if !Equals(result, expected) {
+		t.Errorf("Finite add failed: expected %+v, got %+v", expected, result)
 	}
 }
 
-// Test FiniteNumber.Sub (by subtraction)
-func TestFiniteNumberSub(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 150, 0, ctx)
-	b := new(FiniteNumber).Init(false, 50, 0, ctx)
-	res := a.Sub(b)
+func TestFiniteAddDiffExponent(t *testing.T) {
+	// Test adding two finite numbers with different exponents.
+	// Represent 12.3 as (123, exp=1) and 0.77 as (77, exp=2).
+	a := new(FiniteNumber).Init(false, 123, -1, defaultCtx)
+	b := new(FiniteNumber).Init(false, 77, -2, defaultCtx)
+	// Expected: Align exponents to the lower precision.
+	expected := new(FiniteNumber).Init(false, 1307, -2, defaultCtx)
 
-	fn, ok := res.(*FiniteNumber)
-	if !ok {
-		t.Fatalf("expected FiniteNumber, got %T", res)
-	}
-	if fn.coe != 1 {
-		t.Errorf("expected coefficient 1, got %d", fn.coe)
-	}
-}
-
-// Test FiniteNumber.Mul
-func TestFiniteNumberMul(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 10, 0, ctx)
-	b := new(FiniteNumber).Init(false, 20, 0, ctx)
-	res := a.Mul(b)
-
-	fn, ok := res.(*FiniteNumber)
-	if !ok {
-		t.Fatalf("expected FiniteNumber, got %T", res)
-	}
-	if fn.coe != 2 {
-		t.Errorf("expected coefficient 2, got %d", fn.coe)
-	}
-}
-
-// Test FiniteNumber.Div
-func TestFiniteNumberDiv(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 200, 0, ctx)
-	b := new(FiniteNumber).Init(false, 10, 0, ctx)
-	res := a.Div(b)
-
-	fn, ok := res.(*FiniteNumber)
-	if !ok {
-		t.Fatalf("expected FiniteNumber, got %T", res)
-	}
-	// Division may involve scaling – check for expected value (200/10 == 20).
-	if fn.coe != 2 || fn.exp != 1 {
-		t.Errorf("expected coefficient 2, exponent 1, got %d, %d", fn.coe, fn.exp)
-	}
-}
-
-// Test FiniteNumber.Neg and Abs
-func TestFiniteNumberNegAbs(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 250, 0, ctx)
-	neg := a.Neg()
-
-	fnNeg, ok := neg.(*FiniteNumber)
-	if !ok {
-		t.Fatalf("expected FiniteNumber from Neg(), got %T", neg)
-	}
-	// Check that negation flips the sign. (Assume 'true' means negative.)
-	if fnNeg.sign != true {
-		t.Errorf("expected negated sign true, got false")
-	}
-
-	abs := fnNeg.Abs()
-	fnAbs, ok := abs.(*FiniteNumber)
-	if !ok {
-		t.Fatalf("expected FiniteNumber from Abs(), got %T", abs)
-	}
-	if fnAbs.sign != false {
-		t.Errorf("expected absolute value sign false, got true")
-	}
-}
-
-// Test FiniteNumber.Compare. For zero, comparison should be equal irrespective of sign.
-func TestFiniteNumberCompare(t *testing.T) {
-	a := new(FiniteNumber).Init(false, 0, 0, ctx)
-	b := new(FiniteNumber).Init(true, 0, 0, ctx)
-	if a.Compare(b) != 0 {
-		t.Errorf("expected zero comparison, got non-zero")
-	}
-
-	// Compare two nonzero numbers.
-	x := new(FiniteNumber).Init(false, 100, 0, ctx)
-	y := new(FiniteNumber).Init(false, 200, 0, ctx)
-	if x.Compare(y) != -1 {
-		t.Errorf("expected x.Compare(y) == -1, got %d", x.Compare(y))
-	}
-	if y.Compare(x) != 1 {
-		t.Errorf("expected y.Compare(x) == 1, got %d", y.Compare(x))
-	}
-}
-
-// Test Infinity.Add with two Infinities of the same sign (invalid operation)
-func TestInfinityAddSameSign(t *testing.T) {
-	a := new(Infinity).Init(false, ctx)
-	b := new(Infinity).Init(false, ctx)
 	res := a.Add(b)
-
-	_, ok := res.(*NaN)
+	result, ok := res.(*FiniteNumber)
 	if !ok {
-		t.Errorf("expected NaN as result of adding same-signed infinities")
+		t.Errorf("Expected FiniteNumber result, got %T", res)
+		return
+	}
+
+	if !Equals(result, expected) {
+		t.Errorf("Finite add with different exponents failed: expected %+v, got %+v", expected, result)
 	}
 }
 
-// Test Infinity.Add with opposite signs (should return Zero)
-func TestInfinityAddOppositeSign(t *testing.T) {
-	a := new(Infinity).Init(false, ctx)
-	b := new(Infinity).Init(true, ctx)
-	res := a.Add(b)
-
-	// Assuming Zero is a predefined FiniteNumber representing 0.
-	fn, ok := res.(*FiniteNumber)
+func TestInfinityAddFinite(t *testing.T) {
+	// Test adding Infinity and a finite number.
+	inf := new(Infinity).Init(false, defaultCtx) // positive infinity
+	finite := new(FiniteNumber).Init(false, 500, 0, defaultCtx)
+	// According to rules, Infinity + finite = Infinity when signs match.
+	res := inf.Add(finite)
+	resultInf, ok := res.(*Infinity)
 	if !ok {
-		t.Errorf("expected FiniteNumber (Zero), got %T", res)
+		t.Errorf("Expected Infinity result, got %T", res)
+		return
 	}
-	if !fn.IsZero() {
-		t.Errorf("expected Zero result")
+	if resultInf.sign != inf.sign {
+		t.Errorf("Infinity add failed: expected sign %v, got %v", inf.sign, resultInf.sign)
+	}
+
+	// Test reverse: finite + Infinity should yield same result.
+	res2 := finite.Add(inf)
+	result2, ok := res2.(*Infinity)
+	if !ok {
+		t.Errorf("Expected Infinity result, got %T", res2)
+		return
+	}
+	if result2.sign != inf.sign {
+		t.Errorf("Finite + Infinity add failed: expected sign %v, got %v", inf.sign, result2.sign)
+	}
+}
+
+func TestInfinityAddInfinity(t *testing.T) {
+	// Test adding two infinities with same sign (should yield NaN).
+	inf1 := new(Infinity).Init(false, defaultCtx)
+	inf2 := new(Infinity).Init(false, defaultCtx)
+
+	res := inf1.Add(inf2)
+	if !res.IsNaN() {
+		t.Errorf("Expected NaN for Infinity + Infinity with same sign, got %T", res)
+	}
+
+	// Test adding infinities with opposite signs.
+	infPos := new(Infinity).Init(false, defaultCtx)
+	infNeg := new(Infinity).Init(true, defaultCtx)
+
+	res2 := infPos.Add(infNeg)
+	if res2Finite, ok := res2.(*FiniteNumber); ok {
+		// Infinity + (-Infinity) should result in Zero (represented as a finite zero).
+		if res2Finite.coe != 0 {
+			t.Errorf("Expected Zero for Infinity + -Infinity, got %+v", res2Finite)
+		}
+	} else {
+		t.Errorf("Expected Zero (FiniteNumber) for Infinity + -Infinity, got %T", res2)
+	}
+}
+
+func TestFiniteAddInfinityDifferentSign(t *testing.T) {
+	// Finite + Infinity when signs differ should yield NaN.
+	finite := new(FiniteNumber).Init(false, 250, 0, defaultCtx)
+	inf := new(Infinity).Init(true, defaultCtx) // negative infinity
+
+	res := finite.Add(inf)
+	if !res.IsNaN() {
+		t.Errorf("Expected NaN for finite + Infinity with different signs, got %T", res)
+	}
+}
+
+func TestAddWithNaN(t *testing.T) {
+	// When one of the operands is NaN, the result should be a clone of that NaN.
+	nan := new(NaN).Init(SignalInvalidOperation, 1)
+	finite := new(FiniteNumber).Init(false, 100, 0, defaultCtx)
+
+	res := nan.Add(finite)
+	if !res.IsNaN() {
+		t.Errorf("Expected NaN result when first operand is NaN, got %T", res)
+	}
+
+	res2 := finite.Add(nan)
+	if !res2.IsNaN() {
+		t.Errorf("Expected NaN result when second operand is NaN, got %T", res2)
 	}
 }

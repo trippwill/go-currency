@@ -12,19 +12,19 @@ func TestParseFinite(t *testing.T) {
 		t.Fatalf("expected FiniteNumber, got %T", fp)
 	}
 	// Check the value and exponent.
-	if fp.String() != "123.45" {
-		t.Errorf("expected 123.45, got %s", fp.String())
+	if fp.String() != "123.450000" {
+		t.Errorf("expected 123.450000, got %s", fp.String())
 	}
-	if fp.(*FiniteNumber).exp != -2 {
-		t.Errorf("expected exponent -2, got %d", fp.(*FiniteNumber).exp)
+	if fp.(*FiniteNumber).exp != -6 {
+		t.Errorf("expected exponent -6, got %d", fp.(*FiniteNumber).exp)
 	}
 	// Check the sign.
 	if fp.(*FiniteNumber).sign {
 		t.Error("expected positive sign, got negative")
 	}
 	// Check the coefficient.
-	if fp.(*FiniteNumber).coe != 12345 {
-		t.Errorf("expected coefficient 12345, got %d", fp.(*FiniteNumber).coe)
+	if fp.(*FiniteNumber).coe != 123450000 {
+		t.Errorf("expected coefficient 123450000, got %d", fp.(*FiniteNumber).coe)
 	}
 	// Check the context.
 	if fp.(*FiniteNumber).context.signal != defaultContext.signal {

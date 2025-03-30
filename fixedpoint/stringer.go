@@ -12,7 +12,7 @@ func (a *FiniteNumber) Debug() string {
 		sign = '-'
 	}
 	return fmt.Sprintf(
-		"fn{sign: %c, coe: %d, exp: %d, ctx: %s}",
+		"fn{%c, %d, %d, %s}",
 		sign,
 		a.coe,
 		a.exp,
@@ -26,7 +26,7 @@ func (a *Infinity) Debug() string {
 		sign = '-'
 	}
 	return fmt.Sprintf(
-		"inf{sign: %c, ctx: %s}",
+		"inf{%c, ctx: %s}",
 		sign,
 		a.context.Debug())
 }
@@ -39,63 +39,89 @@ func (a *NaN) Debug() string {
 
 	if diagnostic, ok := DecodePayload(a.diag); ok {
 		return fmt.Sprintf(
-			"nan{sign: %c, signal: %s, diag: %v}",
+			"nan{%c, signal: %s, diag: %v}",
 			sign,
 			a.context.signal,
 			diagnostic)
 	}
 
 	return fmt.Sprintf(
-		"nan{sign: %c, signal: %s, diag: %d}",
+		"nan{%c, signal: %s, diag: %d}",
 		sign,
 		a.context.signal,
 		a.diag)
 }
 
 // String returns a string representation as a decimal number.
-// It formats the number according to the context's precision and rounding mode.
-func (a *FiniteNumber) String() string {
-	if a.IsZero() {
-		return "0"
+func (fn *FiniteNumber) String() string {
+	if fn == nil {
+		return "nil"
 	}
 
-	sign := ""
-	if a.sign {
-		sign = "-"
+	_fn := &FiniteNumber{
+		sign:    fn.sign,
+		coe:     fn.coe,
+		exp:     fn.exp,
+		context: fn.context,
+	}
+
+	var a *FiniteNumber
+	_fp := apply_rounding(_fn)
+	switch v := _fp.(type) {
+	case *FiniteNumber:
+		a = v
+	default:
+		return v.String()
 	}
 
 	prec := int(a.context.precision)
-	coe_str := fmt.Sprintf("%d", a.coe)
-
-	if a.exp >= 0 {
-		coe_str += strings.Repeat("0", int(a.exp))
-		if prec > 0 {
-			frac := strings.Repeat("0", prec)
-			return sign + coe_str + "." + frac
+	// Fast path for zero coefficient.
+	if a.coe == 0 {
+		if prec > 1 {
+			return "0." + strings.Repeat("0", prec-1)
 		}
-		return sign + coe_str
+		return "0"
 	}
 
+	coe_str := fmt.Sprintf("%d", a.coe)
 	pos := len(coe_str) + int(a.exp)
 	var int_part, frac_part string
-	if pos <= 0 {
-		int_part = "0"
-		frac_part = strings.Repeat("0", -pos) + coe_str
+
+	if a.exp < 0 {
+		if pos <= 0 {
+			int_part = "0"
+			frac_part = strings.Repeat("0", -pos) + coe_str
+		} else {
+			int_part = coe_str[:pos]
+			frac_part = coe_str[pos:]
+		}
+	} else if a.exp > 0 {
+		int_part = coe_str + strings.Repeat("0", int(a.exp))
+		frac_part = ""
 	} else {
-		int_part = coe_str[:pos]
-		frac_part = coe_str[pos:]
+		int_part = coe_str
+		frac_part = ""
 	}
 
-	if len(frac_part) > prec {
-		frac_part = frac_part[:prec]
-	} else {
-		frac_part += strings.Repeat("0", prec-len(frac_part))
+	frac_part = strings.TrimRight(frac_part, "0")
+	if frac_part == "" {
+		frac_part = "0"
 	}
 
-	if prec > 0 {
-		return sign + int_part + "." + frac_part
+	// Build result and trim unnecessary zeros.
+	result := int_part + "." + frac_part
+	result = strings.TrimRight(result, "0")
+	// Ensure the numeric part (excluding the decimal point) meets the precision.
+	if len(result)-1 < prec {
+		result += strings.Repeat("0", prec-(len(result)-1))
 	}
-	return sign + int_part
+
+	// Apply sign: note that a.sign being true implies a negative number.
+	if a.sign {
+		result = "-" + result
+	}
+
+	return result
 }
 
 // String returns a string representation of the Infinity.
