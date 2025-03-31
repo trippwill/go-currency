@@ -2,8 +2,6 @@ package currency
 
 import (
 	"testing"
-
-	fp "github.com/trippwill/go-currency/fixedpoint"
 )
 
 // Define a dummy currency type for testing.
@@ -16,40 +14,40 @@ func (tc testCurrency) GetMinorUnitFactor() Factor { return 2 }
 // TestAdd verifies the Add method.
 func TestAdd(t *testing.T) {
 	// Initialize dummy fixed point values.
-	val1 := fp.Parse("100")
-	val2 := fp.Parse("200")
-	expected := fp.Parse("300")
+	val1 := DefaultContext.Parse("100")
+	val2 := DefaultContext.Parse("200")
+	expected := DefaultContext.Parse("300")
 
 	a := Amount[testCurrency]{Value: val1, Currency: testCurrency{}}
 	b := Amount[testCurrency]{Value: val2, Currency: testCurrency{}}
 	result := a.Add(b)
 
 	// Fix: pass &expected to Equal.
-	if !fp.Equals(result.Value, expected) {
+	if !DefaultContext.Equal(result.Value, expected) {
 		t.Errorf("Add failed: expected %v, got %v", expected, result.Value)
 	}
 }
 
 // TestSub verifies the Sub method.
 func TestSub(t *testing.T) {
-	val1 := fp.Parse("300")
-	val2 := fp.Parse("100")
-	expected := fp.Parse("200")
+	val1 := DefaultContext.Parse("300")
+	val2 := DefaultContext.Parse("100")
+	expected := DefaultContext.Parse("200")
 
 	a := Amount[testCurrency]{Value: val1, Currency: testCurrency{}}
 	b := Amount[testCurrency]{Value: val2, Currency: testCurrency{}}
 	result := a.Sub(b)
 
 	// Fix: use fp.Equals for comparison.
-	if !fp.Equals(result.Value, expected) {
+	if !DefaultContext.Equal(result.Value, expected) {
 		t.Errorf("Sub failed: expected %v, got %v", expected, result.Value)
 	}
 }
 
 // BenchmarkAdd measures performance of Add.
 func BenchmarkAdd(b *testing.B) {
-	val1 := fp.Parse("1000")
-	val2 := fp.Parse("2000")
+	val1 := DefaultContext.Parse("1000")
+	val2 := DefaultContext.Parse("2000")
 	a := Amount[testCurrency]{Value: val1, Currency: testCurrency{}}
 	amt := Amount[testCurrency]{Value: val2, Currency: testCurrency{}}
 
@@ -62,9 +60,9 @@ func BenchmarkAdd(b *testing.B) {
 
 // Example benchmark for Mul.
 func BenchmarkMul(b *testing.B) {
-	val := fp.Parse("1000")
+	val := DefaultContext.Parse("1000")
 	a := Amount[testCurrency]{Value: val, Currency: testCurrency{}}
-	factor := fp.Parse("2.0")
+	factor := DefaultContext.Parse("2.0")
 
 	for b.Loop() {
 		_ = a.Mul(factor)

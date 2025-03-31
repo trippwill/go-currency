@@ -1,7 +1,6 @@
 package fixedpoint
 
 type FixedPointChecks interface {
-	IsOk() bool
 	IsFinite() bool
 	IsSpecial() bool
 	IsNaN() bool
@@ -11,18 +10,11 @@ type FixedPointChecks interface {
 	IsPositive() bool
 }
 
-func (c *context) IsOk() bool {
-	switch {
-	case c == nil:
-		return false
-	case c.signal != SignalClear:
-		return false
-	case c.precision < 7 || c.precision > 19:
-		return false
-	}
-
-	return true
-}
+var (
+	_ FixedPointChecks = (*FiniteNumber)(nil)
+	_ FixedPointChecks = (*Infinity)(nil)
+	_ FixedPointChecks = (*NaN)(nil)
+)
 
 func (a *FiniteNumber) IsFinite() bool { return a != nil }
 func (a *Infinity) IsFinite() bool     { return false }

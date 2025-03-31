@@ -5,40 +5,40 @@ import (
 	"strconv"
 )
 
-var (
-	_ FixedPointOperations = (*FiniteNumber)(nil)
-	_ FixedPointOperations = (*Infinity)(nil)
-	_ FixedPointOperations = (*NaN)(nil)
-)
-
 // FixedPointOperations defines a set of arithmetic operations for fixed point numbers.
 type FixedPointOperations interface {
 	// Neg returns the negation of the FixedPoint.
-	Neg() FixedPoint
+	Neg(*Context) FixedPoint
 	// Add returns the sum of this FixedPoint and another.
-	Add(FixedPoint) FixedPoint
+	Add(FixedPoint, *Context) FixedPoint
 	// Sub returns the difference between this FixedPoint and another.
-	Sub(FixedPoint) FixedPoint
+	Sub(FixedPoint, *Context) FixedPoint
 	// Mul returns the product of this FixedPoint and another.
-	Mul(FixedPoint) FixedPoint
+	Mul(FixedPoint, *Context) FixedPoint
 	// Div returns the quotient of this FixedPoint divided by another.
-	Div(FixedPoint) FixedPoint
+	Div(FixedPoint, *Context) FixedPoint
 	// Abs returns the absolute value of this FixedPoint.
-	Abs() FixedPoint
+	Abs(*Context) FixedPoint
 	// Compare compares this FixedPoint with another.
 	// It returns -1 if this FixedPoint is less than the other, 0 if they are equal,
 	// and 1 if this FixedPoint is greater than the other.
 	Compare(FixedPoint) int
 }
 
-func (a *FiniteNumber) Add(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+var (
+	_ FixedPointOperations = (*FiniteNumber)(nil)
+	_ FixedPointOperations = (*Infinity)(nil)
+	_ FixedPointOperations = (*NaN)(nil)
+)
+
+func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
 	switch b := right.(type) {
 	case *Infinity:
-		return b.Add(a)
+		return b.Add(a, ctx)
 
 	case *FiniteNumber:
 		// Align exponents: choose the smaller exponent for maximum precision.
@@ -50,7 +50,8 @@ func (a *FiniteNumber) Add(right FixedPoint) FixedPoint {
 		x_coe, xok := scale_coe(a.coe, a.exp-min_exp)
 		y_coe, yok := scale_coe(b.coe, b.exp-min_exp)
 		if !xok || !yok {
-			return overflow_operation()
+			ctx.signals |= SignalOverflow
+			return new_qnan()
 		}
 
 		var res_coe coefficient
@@ -78,22 +79,22 @@ func (a *FiniteNumber) Add(right FixedPoint) FixedPoint {
 
 		// Overflow during addition or subtraction.
 		if !ok || res_coe_overflow(res_coe) {
-			return overflow_operation()
+			ctx.signals |= SignalOverflow
 		}
 
 		return apply_rounding(
 			new(FiniteNumber).Init(
 				res_sign,
 				res_coe,
-				min_exp,
-				a.context))
+				min_exp),
+			ctx)
 	}
 
 	panic(a)
 }
 
-func (a *Infinity) Add(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *Infinity) Add(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
@@ -101,7 +102,8 @@ func (a *Infinity) Add(right FixedPoint) FixedPoint {
 	case *Infinity:
 		// Infinity + Infinity is invalid operation if signs match
 		if a.sign == b.sign {
-			return new(NaN).Init(SignalInvalidOperation, 1)
+			ctx.signals |= SignalInvalidOperation
+			return new_snan()
 		}
 		// Infinity plus opposite infinity is Zero
 		return Zero.Clone()
@@ -110,27 +112,28 @@ func (a *Infinity) Add(right FixedPoint) FixedPoint {
 		if a.sign == b.sign {
 			return a.Clone()
 		}
-		return new(NaN).Init(SignalInvalidOperation, 1)
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
 	panic(a)
 }
 
-func (a *NaN) Add(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *NaN) Add(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
 	panic(a)
 }
 
-func (a *FiniteNumber) Sub(b FixedPoint) FixedPoint {
-	b_neg := b.Neg()
-	return a.Add(b_neg)
+func (a *FiniteNumber) Sub(b FixedPoint, ctx *Context) FixedPoint {
+	b_neg := b.Neg(ctx)
+	return a.Add(b_neg, ctx)
 }
 
-func (a *Infinity) Sub(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *Infinity) Sub(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
@@ -138,7 +141,7 @@ func (a *Infinity) Sub(right FixedPoint) FixedPoint {
 	case *Infinity:
 		// Infinity - Infinity is invalid operation if signs match
 		if a.sign == b.sign {
-			return new(NaN).Init(SignalInvalidOperation, 1)
+			return new(NaN).Init(false, 2)
 		}
 		// Infinity minus opposite infinity is infinity
 		return a
@@ -150,79 +153,79 @@ func (a *Infinity) Sub(right FixedPoint) FixedPoint {
 	panic(a)
 }
 
-func (a *NaN) Sub(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *NaN) Sub(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 	panic(a)
 }
 
-func (a *FiniteNumber) Mul(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *FiniteNumber) Mul(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
 	switch b := right.(type) {
 	case *FiniteNumber:
-		res_coe, ok := safe_mul(a.coe, b.coe)
-		if !ok || res_coe_overflow(res_coe) {
-			return overflow_operation()
+		resCoe, ok := safe_mul(a.coe, b.coe)
+		if !ok || res_coe_overflow(resCoe) {
+			ctx.signals |= SignalOverflow
+			return new_qnan()
 		}
 
-		result := new(FiniteNumber).Init(mul_sign(a.sign, b.sign), res_coe, mul_exp(a.exp, b.exp), a.context)
-		return apply_rounding(result)
+		result := new(FiniteNumber).Init(mul_sign(a.sign, b.sign), resCoe, mul_exp(a.exp, b.exp))
+		return apply_rounding(result, ctx)
 
 	case *Infinity:
 		if a.coe == 0 {
-			return new(NaN).Init(SignalInvalidOperation, 1)
+			ctx.signals |= SignalInvalidOperation
+			return new_snan()
 		}
-		return new(Infinity).Init(mul_sign(a.sign, b.sign), a.context)
+		return new(Infinity).Init(mul_sign(a.sign, b.sign))
 	}
 
-	// NaN is checked in val_operands above.
 	panic(a)
 }
 
-func res_coe_overflow(res_coe coefficient) bool {
-	return res_coe > fp_coe_max_val
-}
-
-func (a *Infinity) Mul(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *Infinity) Mul(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
 	switch b := right.(type) {
 	case *FiniteNumber:
 		if b.coe == 0 {
-			return new(NaN).Init(SignalInvalidOperation, 1)
+			ctx.signals |= SignalInvalidOperation
+			return new_snan()
 		}
-		return new(Infinity).Init(mul_sign(a.sign, b.sign), a.context)
+		return new(Infinity).Init(mul_sign(a.sign, b.sign))
 
 	case *Infinity:
-		return new(Infinity).Init(mul_sign(a.sign, b.sign), a.context)
+		return new(Infinity).Init(mul_sign(a.sign, b.sign))
 	}
 
 	panic(a)
 }
 
-func (a *NaN) Mul(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *NaN) Mul(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 	return a
 }
 
-func mul_sign(a_sign, b_sign bool) bool {
-	return a_sign != b_sign
-}
+func res_coe_overflow(coe coefficient) bool { return coe > fp_coe_max_val }
+func mul_sign(a_sign, b_sign bool) bool     { return a_sign != b_sign }
 
 func mul_exp(a_exp, b_exp exponent) exponent {
-	return a_exp + b_exp
+	if a_exp > b_exp {
+		return a_exp + b_exp
+	}
+	return b_exp + a_exp
 }
 
-func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *FiniteNumber) Div(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
@@ -233,9 +236,10 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 	case *FiniteNumber:
 		if b.coe == 0 {
 			if a.coe == 0 {
-				return new(NaN).Init(SignalDivisionImpossible, 1)
+				ctx.signals |= SignalDivisionImpossible
+				return new_snan()
 			}
-			return new(Infinity).Init(a.sign != b.sign, a.context)
+			return new(Infinity).Init(a.sign != b.sign)
 		}
 
 		// Perform division with scaling to maintain precision
@@ -244,19 +248,18 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 		adjust := int(a.exp - b.exp)
 
 		// Scale dividend to maintain maximum precision
-		// Use max precision based on coefficient limits
 		scale_factor := coefficient(1)
 		max_scale := fp_coe_max_val / divisor
 
 		// Scale up dividend as much as possible without overflow
-		for scale_factor < coefficient(math.Pow10(int(a.precision))) && scale_factor < max_scale { // Reasonable limit for scaling
+		for scale_factor < coefficient(math.Pow10(int(ctx.precision))) && scale_factor < max_scale {
 			scale_factor *= 10
 			adjust--
 		}
 
 		dividend, ok := safe_mul(dividend, scale_factor)
 		if !ok {
-			return overflow_operation()
+			ctx.signals |= SignalOverflow
 		}
 
 		quotient := dividend / divisor
@@ -264,9 +267,7 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 
 		// Apply proper rounding according to context
 		if remainder != 0 {
-			// Default to round half up if no specific rounding mode in context
-			// In a real implementation, check context.rounding here
-			switch a.context.rounding {
+			switch ctx.rounding {
 			case RoundHalfUp:
 				if remainder*2 >= divisor {
 					quotient++
@@ -296,90 +297,98 @@ func (a *FiniteNumber) Div(right FixedPoint) FixedPoint {
 		}
 
 		if quotient > fp_coe_max_val {
-			return overflow_operation()
+			ctx.signals |= SignalOverflow
 		}
 
 		return apply_rounding(
 			new(FiniteNumber).Init(
 				a.sign != b.sign,
 				coefficient(quotient),
-				exponent(adjust),
-				a.context))
+				exponent(adjust)),
+			ctx)
 	}
 
 	panic(a)
 }
 
-func (a *Infinity) Div(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *Infinity) Div(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 
 	switch b := right.(type) {
 	case *FiniteNumber:
 		if b.coe == 0 {
-			return new(NaN).Init(SignalInvalidOperation, 1)
+			ctx.signals |= SignalInvalidOperation
+			return new_snan()
 		}
-		return new(Infinity).Init(a.sign != b.sign, a.context)
+		return new(Infinity).Init(a.sign != b.sign)
 
 	case *Infinity:
-		return new(NaN).Init(SignalInvalidOperation, 1)
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
 	panic(a)
 }
 
-func (a *NaN) Div(right FixedPoint) FixedPoint {
-	if res, ok := val_operands(a, right); !ok {
+func (a *NaN) Div(right FixedPoint, ctx *Context) FixedPoint {
+	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 	panic(a)
 }
 
 // Neg returns the negation of the FixedPoint.
-func (a *FiniteNumber) Neg() FixedPoint {
+func (a *FiniteNumber) Neg(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
-	return new(FiniteNumber).Init(!a.sign, a.coe, a.exp, a.context)
+	return new(FiniteNumber).Init(!a.sign, a.coe, a.exp)
 }
 
-func (a *Infinity) Neg() FixedPoint {
+func (a *Infinity) Neg(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
-	return new(Infinity).Init(!a.sign, a.context)
+	return new(Infinity).Init(!a.sign)
 }
 
-func (a *NaN) Neg() FixedPoint {
+func (a *NaN) Neg(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
-	return new(NaN).Init(a.signal, 2)
+	return new(NaN).Init(false, 2)
 }
 
-func (a *FiniteNumber) Abs() FixedPoint {
+func (a *FiniteNumber) Abs(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
-	return new(FiniteNumber).Init(false, a.coe, a.exp, a.context)
+	return new(FiniteNumber).Init(false, a.coe, a.exp)
 }
 
-func (a *Infinity) Abs() FixedPoint {
+func (a *Infinity) Abs(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
-	return new(Infinity).Init(false, a.context)
+	return new(Infinity).Init(false)
 }
 
-func (a *NaN) Abs() FixedPoint {
+func (a *NaN) Abs(ctx *Context) FixedPoint {
 	if a == nil {
-		return invalid_operation()
+		ctx.signals |= SignalInvalidOperation
+		return new_snan()
 	}
 
 	return a.Clone()
@@ -480,12 +489,12 @@ func (a *NaN) Compare(b FixedPoint) int {
 	return -1
 }
 
-func invalid_operation() FixedPoint {
-	return new(NaN).Init(SignalInvalidOperation, 3)
+func new_snan() FixedPoint {
+	return new(NaN).Init(true, 3)
 }
 
-func overflow_operation() FixedPoint {
-	return new(NaN).Init(SignalOverflow, 3)
+func new_qnan() FixedPoint {
+	return new(NaN).Init(false, 3)
 }
 
 // scale_coe always adjusts the coefficient to the desired exponent without losing precision.
@@ -542,11 +551,10 @@ func safe_mul[C ~uint64](x, y C) (C, bool) {
 // if operands are valid for computation, it returns nil, true.
 // if operands are invalid, it returns one of the original NaN values and false.
 // if either operand is nil, it returns a new NaN and false.
-func val_operands(a FixedPoint, b FixedPoint) (FixedPoint, bool) {
+func val_operands(a, b FixedPoint, ctx *Context) (FixedPoint, bool) {
 	if a == nil || b == nil {
-		return new(NaN).Init(
-			SignalInvalidOperation,
-			2), false
+		ctx.signals |= SignalInvalidOperation
+		return new(NaN).Init(true, 2), false
 	}
 
 	// The result of any arithmetic operation which has an operand which is a NaN (a quiet NaN or a signaling NaN)
@@ -558,9 +566,11 @@ func val_operands(a FixedPoint, b FixedPoint) (FixedPoint, bool) {
 	b_nan, b_ok := b.(*NaN)
 
 	switch {
-	case a_ok && b_ok && a_nan.signal != SignalClear:
+	case a_ok && b_ok && a_nan.signaling:
+		ctx.signals |= SignalInvalidOperation
 		return a.Clone(), false
-	case a_ok && b_ok && b_nan.signal != SignalClear:
+	case a_ok && b_ok && b_nan.signaling:
+		ctx.signals |= SignalInvalidOperation
 		return b.Clone(), false
 	case a_ok && b_ok:
 		return a.Clone(), false
@@ -574,9 +584,9 @@ func val_operands(a FixedPoint, b FixedPoint) (FixedPoint, bool) {
 
 // apply_rounding rounds a FiniteNumber based on context.precision and context.rounding.
 // the resulting coefficient is adjusted to the desired precision.
-func apply_rounding(fn *FiniteNumber) FixedPoint {
+func apply_rounding(fn *FiniteNumber, ctx *Context) FixedPoint {
 	digits := dlen(fn.coe)
-	prec := int(fn.context.precision)
+	prec := int(ctx.precision)
 	if digits == prec {
 		return fn
 	}
@@ -617,7 +627,7 @@ func apply_rounding(fn *FiniteNumber) FixedPoint {
 		quotient := fn.coe / coefficient(divisor)
 		remainder := fn.coe % coefficient(divisor)
 
-		switch fn.context.rounding {
+		switch ctx.rounding {
 		case RoundHalfUp:
 			if uint64(remainder)*2 >= divisor {
 				quotient++

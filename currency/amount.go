@@ -5,6 +5,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+var DefaultContext = fp.BasicContext()
+
 type Amount[C Currency] struct {
 	Value    fp.FixedPoint
 	Currency C
@@ -19,7 +21,7 @@ func (a Amount[C]) String() string {
 }
 
 func (a Amount[C]) Add(b Amount[C]) Amount[C] {
-	sum := a.Value.Add(b.Value)
+	sum := a.Value.Add(b.Value, DefaultContext)
 	return Amount[C]{
 		Value:    sum,
 		Currency: a.Currency,
@@ -27,7 +29,7 @@ func (a Amount[C]) Add(b Amount[C]) Amount[C] {
 }
 
 func (a Amount[C]) Sub(b Amount[C]) Amount[C] {
-	diff := a.Value.Sub(b.Value)
+	diff := a.Value.Sub(b.Value, DefaultContext)
 	return Amount[C]{
 		Value:    diff,
 		Currency: a.Currency,
@@ -35,7 +37,7 @@ func (a Amount[C]) Sub(b Amount[C]) Amount[C] {
 }
 
 func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
-	product := a.Value.Mul(factor)
+	product := a.Value.Mul(factor, DefaultContext)
 	return Amount[C]{
 		Value:    product,
 		Currency: a.Currency,
@@ -43,7 +45,7 @@ func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
 }
 
 func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
-	quotient := a.Value.Div(divisor)
+	quotient := a.Value.Div(divisor, DefaultContext)
 	return Amount[C]{
 		Value:    quotient,
 		Currency: a.Currency,
@@ -51,7 +53,7 @@ func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
 }
 
 func (a Amount[C]) Neg() Amount[C] {
-	negated := a.Value.Neg()
+	negated := a.Value.Neg(DefaultContext)
 	return Amount[C]{
 		Value:    negated,
 		Currency: a.Currency,
@@ -59,7 +61,7 @@ func (a Amount[C]) Neg() Amount[C] {
 }
 
 func (a Amount[C]) Abs() Amount[C] {
-	absVal := a.Value.Abs()
+	absVal := a.Value.Abs(DefaultContext)
 	return Amount[C]{
 		Value:    absVal,
 		Currency: a.Currency,
@@ -71,7 +73,7 @@ func (a Amount[C]) IsZero() bool {
 }
 
 func (a Amount[C]) Equal(b Amount[C]) bool {
-	return fp.Equals(a.Value, b.Value)
+	return DefaultContext.Equal(a.Value, b.Value)
 }
 
 func Convert[C, D Currency](a Amount[C], factor fp.FixedPoint) Amount[D] {

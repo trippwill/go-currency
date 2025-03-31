@@ -11,12 +11,7 @@ func (a *FiniteNumber) Debug() string {
 	if a.sign {
 		sign = '-'
 	}
-	return fmt.Sprintf(
-		"fn{%c, %d, %d, %s}",
-		sign,
-		a.coe,
-		a.exp,
-		a.context.Debug())
+	return fmt.Sprintf("fn{%c, %d, %d}", sign, a.coe, a.exp)
 }
 
 // Debug returns a formatted string with debug information about the Infinity.
@@ -25,10 +20,7 @@ func (a *Infinity) Debug() string {
 	if a.sign {
 		sign = '-'
 	}
-	return fmt.Sprintf(
-		"inf{%c, ctx: %s}",
-		sign,
-		a.context.Debug())
+	return fmt.Sprintf("inf{%c}", sign)
 }
 
 func (a *NaN) Debug() string {
@@ -38,18 +30,10 @@ func (a *NaN) Debug() string {
 	}
 
 	if diagnostic, ok := DecodePayload(a.diag); ok {
-		return fmt.Sprintf(
-			"nan{%c, signal: %s, diag: %v}",
-			sign,
-			a.context.signal,
-			diagnostic)
+		return fmt.Sprintf("nan{%c, %v}", sign, diagnostic)
 	}
 
-	return fmt.Sprintf(
-		"nan{%c, signal: %s, diag: %d}",
-		sign,
-		a.context.signal,
-		a.diag)
+	return fmt.Sprintf("nan{%c, %d}", sign, a.diag)
 }
 
 // String returns a string representation as a decimal number.
@@ -58,23 +42,13 @@ func (fn *FiniteNumber) String() string {
 		return "nil"
 	}
 
-	_fn := &FiniteNumber{
-		sign:    fn.sign,
-		coe:     fn.coe,
-		exp:     fn.exp,
-		context: fn.context,
+	a := &FiniteNumber{
+		sign: fn.sign,
+		coe:  fn.coe,
+		exp:  fn.exp,
 	}
 
-	var a *FiniteNumber
-	_fp := apply_rounding(_fn)
-	switch v := _fp.(type) {
-	case *FiniteNumber:
-		a = v
-	default:
-		return v.String()
-	}
-
-	prec := int(a.context.precision)
+	prec := dlen(a.coe)
 	// Fast path for zero coefficient.
 	if a.coe == 0 {
 		if prec > 1 {
@@ -138,13 +112,13 @@ func (a *NaN) String() string {
 	if a.sign {
 		sign = '-'
 	}
-	return fmt.Sprintf("%cNaN{%s}:%v", sign, a.context.signal, a.diag)
+	return fmt.Sprintf("%cNaN{%v}", sign, a.diag)
 }
 
-func (c context) Debug() string {
-	return fmt.Sprintf("%s:%v", c.rounding.Debug(), c.precision)
+func (c Context) Debug() string {
+	return fmt.Sprintf("%s:%v:%s[%s]", c.rounding.Debug(), c.precision, c.signals.Debug(), c.traps.Debug())
 }
 
-func (c context) String() string {
-	return fmt.Sprintf("context{rounding: %s, precision: %v}", c.rounding, c.precision)
+func (c Context) String() string {
+	return fmt.Sprintf("context{precision: %v, rounding: %s,  traps: %s}", c.precision, c.rounding, c.traps)
 }
