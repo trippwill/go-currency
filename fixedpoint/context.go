@@ -170,7 +170,7 @@ func (ctx *Context) Parse(s string) FixedPoint {
 
 	// Determine the exponent.
 	// For example, "123.45" becomes 12345 with an exponent of -2.
-	exp := exponent(-len(fracPart))
+	exp := int16(-len(fracPart))
 	coe := coefficient(value)
 
 	// Check for coefficient overflow.
@@ -179,7 +179,7 @@ func (ctx *Context) Parse(s string) FixedPoint {
 		return new_snan()
 	}
 
-	return apply_rounding(
+	return apply_precision(
 		new(FiniteNumber).Init(sign, coe, exp),
 		ctx)
 }
@@ -277,22 +277,22 @@ func (ctx *Context) Compare(a, b FixedPoint) int {
 
 	switch v := a.(type) {
 	case *FiniteNumber:
-		return v.Compare(b)
+		return v.Compare(b, ctx)
 	case *Infinity:
-		return v.Compare(b)
+		return v.Compare(b, ctx)
 	case *NaN:
-		return v.Compare(b)
+		return v.Compare(b, ctx)
 	default:
-		return a.Compare(b)
+		return a.Compare(b, ctx)
 	}
 }
 
 // Comparison functions for FixedPoint values.
-func (ctx *Context) Equal(a, b FixedPoint) bool              { return a.Compare(b) == 0 }
-func (ctx *Context) LessThan(a, b FixedPoint) bool           { return a.Compare(b) < 0 }
-func (ctx *Context) GreaterThan(a, b FixedPoint) bool        { return a.Compare(b) > 0 }
-func (ctx *Context) LessThanOrEqual(a, b FixedPoint) bool    { return a.Compare(b) <= 0 }
-func (ctx *Context) GreaterThanOrEqual(a, b FixedPoint) bool { return a.Compare(b) >= 0 }
+func (ctx *Context) Equal(a, b FixedPoint) bool              { return a.Compare(b, ctx) == 0 }
+func (ctx *Context) LessThan(a, b FixedPoint) bool           { return a.Compare(b, ctx) < 0 }
+func (ctx *Context) GreaterThan(a, b FixedPoint) bool        { return a.Compare(b, ctx) > 0 }
+func (ctx *Context) LessThanOrEqual(a, b FixedPoint) bool    { return a.Compare(b, ctx) <= 0 }
+func (ctx *Context) GreaterThanOrEqual(a, b FixedPoint) bool { return a.Compare(b, ctx) >= 0 }
 
 // Must panics if the traps set in the context are triggered.
 func (ctx *Context) Must(FixedPoint FixedPoint) FixedPoint {

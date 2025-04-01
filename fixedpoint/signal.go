@@ -10,6 +10,7 @@ const (
 	SignalDivisionByZero
 	SignalDivisionImpossible
 	SignalInexact
+	SignalRounding
 	SignalInvalidOperation
 	sig_conversionSyntax
 )
@@ -27,6 +28,7 @@ var debugFlags = []struct {
 	{"0", SignalDivisionByZero},
 	{"P", SignalDivisionImpossible},
 	{"i", SignalInexact},
+	{"r", SignalRounding},
 	{"X", SignalInvalidOperation},
 	{"c", SignalConversionSyntax},
 }
@@ -40,6 +42,7 @@ var stringFlags = []struct {
 	{"SignalDivisionByZero", SignalDivisionByZero},
 	{"SignalDivisionImpossible", SignalDivisionImpossible},
 	{"SignalInexact", SignalInexact},
+	{"SignalRounding", SignalRounding},
 	{"SignalInvalidOperation", SignalInvalidOperation},
 	{"SignalConversionSyntax", SignalConversionSyntax},
 }

@@ -32,14 +32,37 @@ func (a *FiniteNumber) IsInf() bool { return false }
 func (a *Infinity) IsInf() bool     { return a != nil }
 func (a *NaN) IsInf() bool          { return false }
 
-func (a *FiniteNumber) IsZero() bool { return a != nil && a.coe == 0 && a.exp == 0 }
-func (a *Infinity) IsZero() bool     { return false }
-func (a *NaN) IsZero() bool          { return false }
+func (a *FiniteNumber) IsZero() bool {
+	if a == nil {
+		return false
+	}
 
-func (a *FiniteNumber) IsNegative() bool { return a != nil && a.sign }
-func (a *Infinity) IsNegative() bool     { return a != nil && a.sign }
-func (a *NaN) IsNegative() bool          { return false }
+	_, exp := unpack_sign_exp(a.sign_exp)
+	return a.coe == 0 && exp == 0
+}
 
-func (a *FiniteNumber) IsPositive() bool { return a != nil && !a.sign }
-func (a *Infinity) IsPositive() bool     { return a != nil && !a.sign }
-func (a *NaN) IsPositive() bool          { return false }
+func (a *Infinity) IsZero() bool { return false }
+func (a *NaN) IsZero() bool      { return false }
+
+func (a *FiniteNumber) IsNegative() bool {
+	if a == nil {
+		return false
+	}
+
+	sign, _ := unpack_sign_exp(a.sign_exp)
+	return sign
+}
+
+func (a *Infinity) IsNegative() bool { return a != nil && a.sign }
+func (a *NaN) IsNegative() bool      { return false }
+
+func (a *FiniteNumber) IsPositive() bool {
+	if a == nil {
+		return false
+	}
+
+	sign, _ := unpack_sign_exp(a.sign_exp)
+	return !sign
+}
+func (a *Infinity) IsPositive() bool { return a != nil && !a.sign }
+func (a *NaN) IsPositive() bool      { return false }

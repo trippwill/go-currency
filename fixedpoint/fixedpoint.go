@@ -21,9 +21,8 @@ type FixedPoint interface {
 // FiniteNumber represents a finite fixed-point number with a coefficient, exponent, and sign.
 // It also includes a context for precision and rounding mode.
 type FiniteNumber struct {
-	coe  coefficient // The coefficient (significand) of the number.
-	exp  exponent    // The exponent of the number.
-	sign bool        // The sign of the number (true for negative, false for positive).
+	coe      coefficient // The coefficient (significand) of the number.
+	sign_exp t_sign_exp  // The packed sign and exponent of the number.
 }
 
 // Infinity represents a positive or negative infinity value.
@@ -43,8 +42,8 @@ type NaN struct {
 // coefficient represents the significand of a finite number.
 type coefficient uint64
 
-// exponent represents the exponent of a finite number.
-type exponent int16
+// t_sign_exp represents the t_sign_exp of a finite number.
+type t_sign_exp uint16
 
 // diagnostic represents diagnostic information for NaN values.
 type diagnostic uint64
@@ -52,30 +51,34 @@ type diagnostic uint64
 // Predefined FixedPoint values for common constants.
 var (
 	Zero = FiniteNumber{
-		coe: 0,
-		exp: 0,
+		coe:      0,
+		sign_exp: pack_sign_exp(false, 0),
 	}
 
 	NegZero = FiniteNumber{
-		sign: true,
-		coe:  0,
-		exp:  0,
+		sign_exp: pack_sign_exp(true, 0),
+		coe:      0,
 	}
+)
+
+var (
+	_ FixedPoint = (*FiniteNumber)(nil)
+	_ FixedPoint = (*Infinity)(nil)
+	_ FixedPoint = (*NaN)(nil)
 )
 
 // Constants for coefficient and exponent limits.
 const (
 	fp_coe_max_val   coefficient = 9_999_999_999_999_999_999 // Maximum coefficient value (10^19 - 1).
 	fp_coe_max_len               = 19                        // Maximum length of the coefficient.
-	fp_exp_limit_val exponent    = 9_999                     // Maximum exponent value.
+	fp_exp_limit_val int16       = maxExponent               // Maximum exponent value.
 	fp_exp_limit_len             = 4                         // Maximum length of the exponent.
 )
 
 // Init initializes a FiniteNumber with the given sign, coefficient, exponent, and context.
-func (fn *FiniteNumber) Init(sign bool, coe coefficient, exp exponent) *FiniteNumber {
-	fn.sign = sign
+func (fn *FiniteNumber) Init(sign bool, coe coefficient, exp int16) *FiniteNumber {
 	fn.coe = coe
-	fn.exp = exp
+	fn.sign_exp = pack_sign_exp(sign, exp)
 	return fn
 }
 
@@ -100,6 +103,54 @@ func Parse(s string, ctx *Context) FixedPoint {
 	return ctx.Parse(s)
 }
 
+const (
+	minExponent = -1343 // Minimum exponent value.
+	maxExponent = 1344  // Maximum exponent value.
+	bias        = 1344  // Bias for the exponent.
+)
+
+// pack_sign_exp packs a sign and exponent into a 16-bit unsigned integer.
+// - sign: overall sign; false means positive, true means negative.
+// - exponent: must be in the range [-1343, 1344].
+// The layout is as follows:
+//
+// [15] | [14:12] | [11:0]
+// sign | unused  | biased exponent
+func pack_sign_exp(sign bool, exponent int16) t_sign_exp {
+	if exponent < minExponent || exponent > maxExponent {
+		panic(fmt.Sprintf("exponent %d out of range [%d, %d]", exponent, minExponent, maxExponent))
+	}
+	// Compute the biased exponent.
+	e := uint16(exponent + bias)
+
+	// Determine the sign bit.
+	s := uint16(0)
+	if sign {
+		s = 1
+	}
+
+	// Pack the sign in bit 15 and the exponent in bits 0-11.
+	return t_sign_exp((s << 15) | e)
+}
+
+// unpack_sign_exp unpacks a 16-bit field into its sign and exponent components.
+// Returns:
+// - sign: false for positive, true for negative.
+// - exponent: the original exponent.
+func unpack_sign_exp(packed t_sign_exp) (bool, int16) {
+	// Extract the sign bit (bit 15).
+	s := (packed >> 15) & 0x1
+
+	// Extract the biased exponent (bits 0-11).
+	e := int16(packed & 0x0FFF)
+
+	// Reverse the bias to get the original exponent.
+	exponent := e - bias
+	sign := s == 1
+
+	return sign, exponent
+}
+
 // Clone creates a deep copy of a FiniteNumber.
 func (a *FiniteNumber) Clone() FixedPoint {
 	if a == nil {
@@ -107,9 +158,8 @@ func (a *FiniteNumber) Clone() FixedPoint {
 	}
 
 	return &FiniteNumber{
-		sign: a.sign,
-		coe:  a.coe,
-		exp:  a.exp,
+		coe:      a.coe,
+		sign_exp: a.sign_exp,
 	}
 }
 

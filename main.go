@@ -30,10 +30,22 @@ func main() {
 	println(bc.Debug())
 	println(sep)
 
+	a = bc.Parse("9999997.255")
+	b = bc.Parse("9999997.255")
+	c = bc.Must(bc.Add(a, b))
+	d := bc.Must(bc.Sub(b, a))
+
+	fmt.Printf(format, "a", a.String(), a.Debug())
+	fmt.Printf(format, "b", b.String(), b.Debug())
+	fmt.Printf(format, "a+b", c.String(), c.Debug())
+	fmt.Printf(format, "a-b", d.String(), d.Debug())
+	println(bc.Debug())
+	println(sep)
+
 	a = bc.Parse("-0.50")
 	b = bc.Parse("37.50")
 	c = bc.Must(bc.Add(a, b))
-	d := bc.Must(bc.Sub(b, c))
+	d = bc.Must(bc.Sub(b, c))
 
 	fmt.Printf(format, "a", a.String(), a.Debug())
 	fmt.Printf(format, "b", b.String(), b.Debug())

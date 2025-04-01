@@ -7,15 +7,22 @@ import (
 
 // Debug returns a formatted string with debug information about the FixedPoint.
 func (a *FiniteNumber) Debug() string {
-	sign := '+'
-	if a.sign {
-		sign = '-'
+	if a == nil {
+		return "nil"
 	}
-	return fmt.Sprintf("fn{%c, %d, %d}", sign, a.coe, a.exp)
+	sign, exp := unpack_sign_exp(a.sign_exp)
+	sr := '+'
+	if sign {
+		sr = '-'
+	}
+	return fmt.Sprintf("fn{%c, %d, %d}", sr, a.coe, exp)
 }
 
 // Debug returns a formatted string with debug information about the Infinity.
 func (a *Infinity) Debug() string {
+	if a == nil {
+		return "nil"
+	}
 	sign := '+'
 	if a.sign {
 		sign = '-'
@@ -24,6 +31,9 @@ func (a *Infinity) Debug() string {
 }
 
 func (a *NaN) Debug() string {
+	if a == nil {
+		return "nil"
+	}
 	sign := '+'
 	if a.sign {
 		sign = '-'
@@ -42,37 +52,32 @@ func (fn *FiniteNumber) String() string {
 		return "nil"
 	}
 
-	a := &FiniteNumber{
-		sign: fn.sign,
-		coe:  fn.coe,
-		exp:  fn.exp,
-	}
+	sign, exp := unpack_sign_exp(fn.sign_exp)
+	prec := dlen(fn.coe)
 
-	prec := dlen(a.coe)
 	// Fast path for zero coefficient.
-	if a.coe == 0 {
+	if fn.coe == 0 {
 		if prec > 1 {
 			return "0." + strings.Repeat("0", prec-1)
 		}
-		return "0"
+		return "0."
 	}
 
-	coe_str := fmt.Sprintf("%d", a.coe)
-	pos := len(coe_str) + int(a.exp)
+	coe_str := fmt.Sprintf("%d", fn.coe)
+	pos := len(coe_str) + int(exp)
 	var int_part, frac_part string
 
-	if a.exp < 0 {
-		if pos <= 0 {
-			int_part = "0"
-			frac_part = strings.Repeat("0", -pos) + coe_str
-		} else {
-			int_part = coe_str[:pos]
-			frac_part = coe_str[pos:]
-		}
-	} else if a.exp > 0 {
-		int_part = coe_str + strings.Repeat("0", int(a.exp))
+	switch {
+	case exp < 0 && pos <= 0:
+		int_part = "0"
+		frac_part = strings.Repeat("0", -pos) + coe_str
+	case exp < 0:
+		int_part = coe_str[:pos]
+		frac_part = coe_str[pos:]
+	case exp > 0:
+		int_part = coe_str + strings.Repeat("0", int(exp))
 		frac_part = ""
-	} else {
+	default:
 		int_part = coe_str
 		frac_part = ""
 	}
@@ -85,13 +90,14 @@ func (fn *FiniteNumber) String() string {
 	// Build result and trim unnecessary zeros.
 	result := int_part + "." + frac_part
 	result = strings.TrimRight(result, "0")
+
 	// Ensure the numeric part (excluding the decimal point) meets the precision.
 	if len(result)-1 < prec {
 		result += strings.Repeat("0", prec-(len(result)-1))
 	}
 
-	// Apply sign: note that a.sign being true implies a negative number.
-	if a.sign {
+	// Apply sign: note that sign being true implies a negative number.
+	if sign {
 		result = "-" + result
 	}
 

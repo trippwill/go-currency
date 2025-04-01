@@ -68,7 +68,7 @@ func TestFiniteNumber_Mul(t *testing.T) {
 		{"Multiply positive numbers", "2.00", "3.50", "7.00000000"},
 		{"Multiply negative numbers", "-2.00", "-3.50", "7.00000000"},
 		{"Multiply positive and negative", "2.00", "-3.50", "-7.00000000"},
-		{"Multiply by zero", "2.00", "0", "0"},
+		{"Multiply by zero", "2.00", "0", "0."},
 	}
 
 	ctx := fixedpoint.BasicContext()

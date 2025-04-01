@@ -1,6 +1,7 @@
 package fixedpoint
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 )
@@ -22,7 +23,7 @@ type FixedPointOperations interface {
 	// Compare compares this FixedPoint with another.
 	// It returns -1 if this FixedPoint is less than the other, 0 if they are equal,
 	// and 1 if this FixedPoint is greater than the other.
-	Compare(FixedPoint) int
+	Compare(FixedPoint, *Context) int
 }
 
 var (
@@ -41,14 +42,16 @@ func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
 		return b.Add(a, ctx)
 
 	case *FiniteNumber:
+		a_sign, a_exp := unpack_sign_exp(a.sign_exp)
+		b_sign, b_exp := unpack_sign_exp(b.sign_exp)
 		// Align exponents: choose the smaller exponent for maximum precision.
-		min_exp := min(b.exp, a.exp)
+		min_exp := min(a_exp, b_exp)
 
 		// Scale each coefficient to the common exponent.
 		// For a, we need to multiply by 10^(a.exp - minExp)
 		// For b, we need to multiply by 10^(b.exp - minExp)
-		x_coe, xok := scale_coe(a.coe, a.exp-min_exp)
-		y_coe, yok := scale_coe(b.coe, b.exp-min_exp)
+		x_coe, xok := scale_coe(a.coe, a_exp-min_exp)
+		y_coe, yok := scale_coe(b.coe, b_exp-min_exp)
 		if !xok || !yok {
 			ctx.signals |= SignalOverflow
 			return new_qnan()
@@ -59,17 +62,17 @@ func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
 		var ok bool
 
 		// When signs are identical, do simple addition.
-		if a.sign == b.sign {
+		if a_sign == b_sign {
 			res_coe, ok = safe_add(x_coe, y_coe)
-			res_sign = a.sign
+			res_sign = a_sign
 		} else {
 			// When signs differ, subtract the smaller magnitude from the larger.
 			if x_coe >= y_coe {
 				res_coe, ok = safe_sub(x_coe, y_coe)
-				res_sign = a.sign
+				res_sign = a_sign
 			} else {
 				res_coe, ok = safe_sub(y_coe, x_coe)
-				res_sign = b.sign
+				res_sign = b_sign
 			}
 			// Zero result should always be positive.
 			if res_coe == 0 {
@@ -78,11 +81,11 @@ func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
 		}
 
 		// Overflow during addition or subtraction.
-		if !ok || res_coe_overflow(res_coe) {
+		if !ok || res_coe_overflow(res_coe) || res_coe > fp_coe_max_val {
 			ctx.signals |= SignalOverflow
 		}
 
-		return apply_rounding(
+		return apply_precision(
 			new(FiniteNumber).Init(
 				res_sign,
 				res_coe,
@@ -90,7 +93,7 @@ func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
 			ctx)
 	}
 
-	panic(a)
+	panic(errUnsupportedType(a))
 }
 
 func (a *Infinity) Add(right FixedPoint, ctx *Context) FixedPoint {
@@ -108,8 +111,9 @@ func (a *Infinity) Add(right FixedPoint, ctx *Context) FixedPoint {
 		// Infinity plus opposite infinity is Zero
 		return Zero.Clone()
 	case *FiniteNumber:
+		b_sign, _ := unpack_sign_exp(b.sign_exp)
 		// Infinity plus finite number is infinity if signs match
-		if a.sign == b.sign {
+		if a.sign == b_sign {
 			return a.Clone()
 		}
 		ctx.signals |= SignalInvalidOperation
@@ -165,6 +169,8 @@ func (a *FiniteNumber) Mul(right FixedPoint, ctx *Context) FixedPoint {
 		return res
 	}
 
+	a_sign, a_exp := unpack_sign_exp(a.sign_exp)
+
 	switch b := right.(type) {
 	case *FiniteNumber:
 		resCoe, ok := safe_mul(a.coe, b.coe)
@@ -173,15 +179,17 @@ func (a *FiniteNumber) Mul(right FixedPoint, ctx *Context) FixedPoint {
 			return new_qnan()
 		}
 
-		result := new(FiniteNumber).Init(mul_sign(a.sign, b.sign), resCoe, mul_exp(a.exp, b.exp))
-		return apply_rounding(result, ctx)
+		b_sign, b_exp := unpack_sign_exp(b.sign_exp)
+
+		result := new(FiniteNumber).Init(mul_sign(a_sign, b_sign), resCoe, mul_exp(a_exp, b_exp))
+		return apply_precision(result, ctx)
 
 	case *Infinity:
 		if a.coe == 0 {
 			ctx.signals |= SignalInvalidOperation
 			return new_snan()
 		}
-		return new(Infinity).Init(mul_sign(a.sign, b.sign))
+		return new(Infinity).Init(mul_sign(a_sign, b.sign))
 	}
 
 	panic(a)
@@ -198,7 +206,9 @@ func (a *Infinity) Mul(right FixedPoint, ctx *Context) FixedPoint {
 			ctx.signals |= SignalInvalidOperation
 			return new_snan()
 		}
-		return new(Infinity).Init(mul_sign(a.sign, b.sign))
+
+		b_sign, _ := unpack_sign_exp(b.sign_exp)
+		return new(Infinity).Init(mul_sign(a.sign, b_sign))
 
 	case *Infinity:
 		return new(Infinity).Init(mul_sign(a.sign, b.sign))
@@ -217,7 +227,7 @@ func (a *NaN) Mul(right FixedPoint, ctx *Context) FixedPoint {
 func res_coe_overflow(coe coefficient) bool { return coe > fp_coe_max_val }
 func mul_sign(a_sign, b_sign bool) bool     { return a_sign != b_sign }
 
-func mul_exp(a_exp, b_exp exponent) exponent {
+func mul_exp(a_exp, b_exp int16) int16 {
 	if a_exp > b_exp {
 		return a_exp + b_exp
 	}
@@ -229,23 +239,25 @@ func (a *FiniteNumber) Div(right FixedPoint, ctx *Context) FixedPoint {
 		return res
 	}
 
+	a_sign, a_exp := unpack_sign_exp(a.sign_exp)
 	switch b := right.(type) {
 	case *Infinity:
 		return Zero.Clone()
 
 	case *FiniteNumber:
+		b_sign, b_exp := unpack_sign_exp(b.sign_exp)
 		if b.coe == 0 {
 			if a.coe == 0 {
 				ctx.signals |= SignalDivisionImpossible
 				return new_snan()
 			}
-			return new(Infinity).Init(a.sign != b.sign)
+			return new(Infinity).Init(a_sign != b_sign)
 		}
 
 		// Perform division with scaling to maintain precision
 		dividend := a.coe
 		divisor := b.coe
-		adjust := int(a.exp - b.exp)
+		adjust := int(a_exp - b_exp)
 
 		// Scale dividend to maintain maximum precision
 		scale_factor := coefficient(1)
@@ -262,49 +274,17 @@ func (a *FiniteNumber) Div(right FixedPoint, ctx *Context) FixedPoint {
 			ctx.signals |= SignalOverflow
 		}
 
-		quotient := dividend / divisor
-		remainder := dividend % divisor
-
-		// Apply proper rounding according to context
-		if remainder != 0 {
-			switch ctx.rounding {
-			case RoundHalfUp:
-				if remainder*2 >= divisor {
-					quotient++
-				}
-			case RoundHalfEven:
-				if remainder*2 > divisor {
-					quotient++
-				}
-				if remainder*2 == divisor && quotient%2 == 1 {
-					quotient++
-				}
-			case RoundDown:
-				// Truncate
-			case RoundCeiling:
-				if !a.sign && remainder != 0 {
-					quotient++
-				}
-			case RoundFloor:
-				if a.sign && remainder != 0 {
-					quotient++
-				}
-			default:
-				if remainder*2 >= divisor {
-					quotient++
-				}
-			}
-		}
+		quotient := scale_round(a_sign, dividend, divisor, ctx)
 
 		if quotient > fp_coe_max_val {
 			ctx.signals |= SignalOverflow
 		}
 
-		return apply_rounding(
+		return apply_precision(
 			new(FiniteNumber).Init(
-				a.sign != b.sign,
+				a_sign != b_sign,
 				coefficient(quotient),
-				exponent(adjust)),
+				int16(adjust)),
 			ctx)
 	}
 
@@ -322,7 +302,8 @@ func (a *Infinity) Div(right FixedPoint, ctx *Context) FixedPoint {
 			ctx.signals |= SignalInvalidOperation
 			return new_snan()
 		}
-		return new(Infinity).Init(a.sign != b.sign)
+		b_sign, _ := unpack_sign_exp(b.sign_exp)
+		return new(Infinity).Init(a.sign != b_sign)
 
 	case *Infinity:
 		ctx.signals |= SignalInvalidOperation
@@ -346,7 +327,8 @@ func (a *FiniteNumber) Neg(ctx *Context) FixedPoint {
 		return new_snan()
 	}
 
-	return new(FiniteNumber).Init(!a.sign, a.coe, a.exp)
+	sign, exp := unpack_sign_exp(a.sign_exp)
+	return new(FiniteNumber).Init(!sign, a.coe, exp)
 }
 
 func (a *Infinity) Neg(ctx *Context) FixedPoint {
@@ -373,7 +355,9 @@ func (a *FiniteNumber) Abs(ctx *Context) FixedPoint {
 		return new_snan()
 	}
 
-	return new(FiniteNumber).Init(false, a.coe, a.exp)
+	_, exp := unpack_sign_exp(a.sign_exp)
+
+	return new(FiniteNumber).Init(false, a.coe, exp)
 }
 
 func (a *Infinity) Abs(ctx *Context) FixedPoint {
@@ -394,12 +378,13 @@ func (a *NaN) Abs(ctx *Context) FixedPoint {
 	return a.Clone()
 }
 
-func (a *FiniteNumber) Compare(b FixedPoint) int {
+func (a *FiniteNumber) Compare(b FixedPoint, ctx *Context) int {
+	a_sign, a_exp := unpack_sign_exp(a.sign_exp)
 	switch b := b.(type) {
 	case *NaN:
 		return 1
 	case *Infinity:
-		if a.sign {
+		if a_sign {
 			if b.sign {
 				return 1
 			}
@@ -411,55 +396,50 @@ func (a *FiniteNumber) Compare(b FixedPoint) int {
 			return -1
 		}
 	case *FiniteNumber:
+		b_sign, b_exp := unpack_sign_exp(b.sign_exp)
+
 		// Zeroes compare equal irrespective of sign.
 		if a.IsZero() && b.IsZero() {
 			return 0
 		}
-		// Different signs: negative < positive.
-		if a.sign != b.sign {
-			if a.sign {
-				return -1
-			}
-			return 1
-		}
-		// Align exponents for comparison.
-		min_exp := min(a.exp, b.exp)
-		a_oe, a_ok := scale_coe(a.coe, a.exp-min_exp)
-		b_coe, b_ok := scale_coe(b.coe, b.exp-min_exp)
-		switch {
-		case !a_ok || !b_ok:
-			if a_oe < b_coe {
-				if a.sign {
-					return 1
-				}
-				return -1
-			} else if a_oe > b_coe {
-				if a.sign {
-					return -1
-				}
-				return 1
-			}
-			return 0
 
-		case a_oe < b_coe:
-			if a.sign {
-				return 1
-			}
-			return -1
-		case a_oe > b_coe:
-			if a.sign {
+		// Different signs: negative < positive.
+		if a_sign != b_sign {
+			if a_sign {
 				return -1
 			}
 			return 1
-		default:
-			return 0
 		}
+
+		// Align exponents: choose the smaller exponent for maximum precision.
+		min_exp := min(a_exp, b_exp)
+		a_coe, a_ok := scale_coe(a.coe, a_exp-min_exp)
+		b_coe, b_ok := scale_coe(b.coe, b_exp-min_exp)
+
+		if !a_ok || !b_ok {
+			// Overflow during scaling.
+			ctx.signals |= SignalOverflow
+			return 1
+		}
+
+		// Compare coefficients.
+		if a_coe < b_coe {
+			return -1
+		} else if a_coe > b_coe {
+			return 1
+		}
+
+		return 0
 	}
 
-	panic(a)
+	panic(errUnsupportedType(a))
 }
 
-func (a *Infinity) Compare(b FixedPoint) int {
+func errUnsupportedType(a any) error {
+	return fmt.Errorf("unsupported FixedPoint type: %T", a)
+}
+
+func (a *Infinity) Compare(b FixedPoint, _ *Context) int {
 	switch b := b.(type) {
 	case *NaN:
 		return 1
@@ -478,10 +458,10 @@ func (a *Infinity) Compare(b FixedPoint) int {
 		return -1
 	}
 
-	panic(a)
+	panic(errUnsupportedType(a))
 }
 
-func (a *NaN) Compare(b FixedPoint) int {
+func (a *NaN) Compare(b FixedPoint, _ *Context) int {
 	// NaN compares equal to another NaN; otherwise, it is considered less.
 	if _, ok := b.(*NaN); ok {
 		return 0
@@ -498,10 +478,10 @@ func new_qnan() FixedPoint {
 }
 
 // scale_coe always adjusts the coefficient to the desired exponent without losing precision.
-func scale_coe(c coefficient, diff exponent) (coefficient, bool) {
+func scale_coe(c coefficient, diff int16) (coefficient, bool) {
 	if diff > 0 {
 		// Multiply absolute value by 10 for each increment in diff.
-		for i := exponent(0); i < diff; i++ {
+		for range int(diff) {
 			// Check for multiplication overflow.
 			if c > fp_coe_max_val/10 {
 				return 0, false
@@ -579,24 +559,62 @@ func val_operands(a, b FixedPoint, ctx *Context) (FixedPoint, bool) {
 	case !a_ok && b_ok:
 		return b.Clone(), false
 	}
+
 	return nil, true
 }
 
-// apply_rounding rounds a FiniteNumber based on context.precision and context.rounding.
+func scale_round(sign bool, dividend coefficient, divisor coefficient, ctx *Context) coefficient {
+	quotient := dividend / divisor
+	remainder := dividend % divisor
+
+	// Apply proper rounding according to context
+	if remainder != 0 {
+		switch ctx.rounding {
+		case RoundHalfUp:
+			if remainder*2 >= divisor {
+				quotient++
+			}
+		case RoundHalfEven:
+			if remainder*2 > divisor {
+				quotient++
+			}
+			if remainder*2 == divisor && quotient%2 == 1 {
+				quotient++
+			}
+		case RoundDown:
+			// Truncate
+		case RoundCeiling:
+			if !sign && remainder != 0 {
+				quotient++
+			}
+		case RoundFloor:
+			if sign && remainder != 0 {
+				quotient++
+			}
+		default:
+			if remainder*2 >= divisor {
+				quotient++
+			}
+		}
+	}
+
+	return quotient
+}
+
+// apply_precision rounds a FiniteNumber based on context.precision and context.rounding.
 // the resulting coefficient is adjusted to the desired precision.
-func apply_rounding(fn *FiniteNumber, ctx *Context) FixedPoint {
+func apply_precision(fn *FiniteNumber, ctx *Context) FixedPoint {
 	digits := dlen(fn.coe)
 	prec := int(ctx.precision)
 	if digits == prec {
 		return fn
 	}
 
+	sign, exp := unpack_sign_exp(fn.sign_exp)
+
 	switch {
 	case digits == 0:
 		// If the coefficient is zero, no rounding is needed.
-		return fn
-	case digits == prec:
-		// If the number of digits is equal to precision, no rounding is needed.
 		return fn
 	case digits < prec:
 		// If the number of digits is less than precision, scale up.
@@ -612,7 +630,7 @@ func apply_rounding(fn *FiniteNumber, ctx *Context) FixedPoint {
 
 		if res_coe, ok := safe_mul(fn.coe, required_mult); ok {
 			fn.coe = res_coe
-			fn.exp -= exponent(diff)
+			fn.sign_exp = pack_sign_exp(sign, exp-int16(diff))
 		}
 
 		return fn
@@ -624,46 +642,17 @@ func apply_rounding(fn *FiniteNumber, ctx *Context) FixedPoint {
 			divisor *= 10
 		}
 
-		quotient := fn.coe / coefficient(divisor)
-		remainder := fn.coe % coefficient(divisor)
+		res_coe := scale_round(sign, fn.coe, coefficient(divisor), ctx)
 
-		switch ctx.rounding {
-		case RoundHalfUp:
-			if uint64(remainder)*2 >= divisor {
-				quotient++
-			}
-		case RoundHalfEven:
-			if uint64(remainder)*2 > divisor {
-				quotient++
-			} else if uint64(remainder)*2 == divisor {
-				if quotient%2 == 1 {
-					quotient++
-				}
-			}
-		case RoundDown:
-			// truncate
-		case RoundCeiling:
-			if !fn.sign && remainder != 0 {
-				quotient++
-			}
-		case RoundFloor:
-			if fn.sign && remainder != 0 {
-				quotient++
-			}
-		default:
-			if uint64(remainder)*2 >= divisor {
-				quotient++
-			}
-		}
-
-		new_exp := fn.exp + exponent(drop)
-		fn.coe = quotient
-		fn.exp = new_exp
-
+		new_exp := exp + int16(drop)
+		fn.coe = res_coe
+		fn.sign_exp = pack_sign_exp(sign, new_exp)
+		ctx.signals |= SignalRounding
+		return fn
+	default:
+		// If the number of digits is equal to precision, no rounding is needed.
 		return fn
 	}
-
-	panic(fn)
 }
 
 func dlen[C ~uint64](c C) int {
