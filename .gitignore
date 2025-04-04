@@ -1,1 +1,2 @@
 go-currency
+fixedpoint/testdata/fuzz/FuzzX32PackUnpackRoundtrip
