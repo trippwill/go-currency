@@ -112,7 +112,7 @@ func (ctx *Context) Signal() Signal {
 
 // Parse converts a string into a FixedPoint value.
 // It handles special values (e.g., "NaN", "Infinity") and parses finite numbers.
-func (ctx *Context) Parse(s string) FixedPoint {
+func (ctx *Context) Parse(s string) X128 {
 	// Trim surrounding spaces.
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -184,7 +184,7 @@ func (ctx *Context) Parse(s string) FixedPoint {
 		ctx)
 }
 
-func (ctx *Context) Add(a, b FixedPoint) FixedPoint {
+func (ctx *Context) Add(a, b X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Add(b, ctx)
@@ -198,7 +198,7 @@ func (ctx *Context) Add(a, b FixedPoint) FixedPoint {
 }
 
 // Sub performs subtraction of two FixedPoint values.
-func (ctx *Context) Sub(a, b FixedPoint) FixedPoint {
+func (ctx *Context) Sub(a, b X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Sub(b, ctx)
@@ -212,7 +212,7 @@ func (ctx *Context) Sub(a, b FixedPoint) FixedPoint {
 }
 
 // Mul performs multiplication of two FixedPoint values.
-func (ctx *Context) Mul(a, b FixedPoint) FixedPoint {
+func (ctx *Context) Mul(a, b X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Mul(b, ctx)
@@ -226,7 +226,7 @@ func (ctx *Context) Mul(a, b FixedPoint) FixedPoint {
 }
 
 // Div performs division of two FixedPoint values.
-func (ctx *Context) Div(a, b FixedPoint) FixedPoint {
+func (ctx *Context) Div(a, b X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Div(b, ctx)
@@ -240,7 +240,7 @@ func (ctx *Context) Div(a, b FixedPoint) FixedPoint {
 }
 
 // Neg performs negation of a FixedPoint value.
-func (ctx *Context) Neg(a FixedPoint) FixedPoint {
+func (ctx *Context) Neg(a X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Neg(ctx)
@@ -254,7 +254,7 @@ func (ctx *Context) Neg(a FixedPoint) FixedPoint {
 }
 
 // Abs performs absolute value of a FixedPoint value.
-func (ctx *Context) Abs(a FixedPoint) FixedPoint {
+func (ctx *Context) Abs(a X128) X128 {
 	switch v := a.(type) {
 	case *FiniteNumber:
 		return v.Abs(ctx)
@@ -270,7 +270,7 @@ func (ctx *Context) Abs(a FixedPoint) FixedPoint {
 // Compare compares two FixedPoint values and returns an integer indicating their relative order.
 // It returns -1 if a < b, 0 if a == b, and 1 if a > b.
 // panics if ctx is nil.
-func (ctx *Context) Compare(a, b FixedPoint) int {
+func (ctx *Context) Compare(a, b X128) int {
 	if ctx == nil {
 		panic("context is nil")
 	}
@@ -288,14 +288,14 @@ func (ctx *Context) Compare(a, b FixedPoint) int {
 }
 
 // Comparison functions for FixedPoint values.
-func (ctx *Context) Equal(a, b FixedPoint) bool              { return a.Compare(b, ctx) == 0 }
-func (ctx *Context) LessThan(a, b FixedPoint) bool           { return a.Compare(b, ctx) < 0 }
-func (ctx *Context) GreaterThan(a, b FixedPoint) bool        { return a.Compare(b, ctx) > 0 }
-func (ctx *Context) LessThanOrEqual(a, b FixedPoint) bool    { return a.Compare(b, ctx) <= 0 }
-func (ctx *Context) GreaterThanOrEqual(a, b FixedPoint) bool { return a.Compare(b, ctx) >= 0 }
+func (ctx *Context) Equal(a, b X128) bool              { return a.Compare(b, ctx) == 0 }
+func (ctx *Context) LessThan(a, b X128) bool           { return a.Compare(b, ctx) < 0 }
+func (ctx *Context) GreaterThan(a, b X128) bool        { return a.Compare(b, ctx) > 0 }
+func (ctx *Context) LessThanOrEqual(a, b X128) bool    { return a.Compare(b, ctx) <= 0 }
+func (ctx *Context) GreaterThanOrEqual(a, b X128) bool { return a.Compare(b, ctx) >= 0 }
 
 // Must panics if the traps set in the context are triggered.
-func (ctx *Context) Must(FixedPoint FixedPoint) FixedPoint {
+func (ctx *Context) Must(FixedPoint X128) X128 {
 	if ctx.traps&ctx.signals != 0 {
 		panic(fmt.Sprintf("signals: %v", ctx.signals))
 	}
@@ -303,7 +303,7 @@ func (ctx *Context) Must(FixedPoint FixedPoint) FixedPoint {
 }
 
 // Handle traps and return the FixedPoint value.
-func (ctx *Context) Trap(handler func(*Context, FixedPoint) FixedPoint, a FixedPoint) FixedPoint {
+func (ctx *Context) Trap(handler func(*Context, X128) X128, a X128) X128 {
 	if ctx.traps&ctx.signals != 0 {
 		return handler(ctx, a)
 	}
@@ -311,7 +311,7 @@ func (ctx *Context) Trap(handler func(*Context, FixedPoint) FixedPoint, a FixedP
 }
 
 // All applies the specified operation to all FixedPoint values in the args slice.
-func All(op func(a, b FixedPoint) FixedPoint, args ...FixedPoint) FixedPoint {
+func All(op func(a, b X128) X128, args ...X128) X128 {
 	if len(args) == 0 {
 		return nil
 	}
@@ -324,6 +324,6 @@ func All(op func(a, b FixedPoint) FixedPoint, args ...FixedPoint) FixedPoint {
 	return result
 }
 
-func TestMustAll(ctx *Context, a, b, c, d FixedPoint) FixedPoint {
+func TestMustAll(ctx *Context, a, b, c, d X128) X128 {
 	return ctx.Must(All(ctx.Add, a, b, c, d))
 }

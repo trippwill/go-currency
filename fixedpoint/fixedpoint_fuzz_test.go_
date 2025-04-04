@@ -1,0 +1,43 @@
+package fixedpoint
+
+import (
+	"testing"
+)
+
+func FuzzX64RoundTrip(f *testing.F) {
+	// Seed the fuzzer with some initial values
+	f.Add(int16(0), uint64(0x4000000000000))    // Small form
+	f.Add(int16(1023), uint64(0x7FFFFFFFFFFFF)) // Large form
+	f.Add(int16(0), uint64(0))                  // Zero value
+
+	f.Fuzz(func(t *testing.T, exp int16, coe uint64) {
+		// Map integer to kind
+		// kinds := []kind{kind_finite, kind_infinity, kind_quiet, kind_signaling}
+		kind := kind(kind_finite)
+
+		// Map sign
+		sign := sign(sign_positive)
+		if coe%2 == 1 {
+			sign = sign_negative
+		}
+
+		// Create an X64 value and pack it
+		var x X64
+		err := x.pack(kind, sign, exp, coe)
+		if err != nil {
+			t.Fatalf("pack failed: %v", err)
+		}
+
+		// Unpack the value
+		unpackedKind, unpackedSign, unpackedExp, unpackedCoe, err := x.unpack()
+		if err != nil {
+			t.Fatalf("unpack failed: %v", err)
+		}
+
+		// Verify round-trip consistency
+		if kind != unpackedKind || sign != unpackedSign || exp != unpackedExp || coe != unpackedCoe {
+			t.Errorf("round-trip mismatch: got (%v, %v, %v, %v), want (%v, %v, %v, %v)",
+				unpackedKind, unpackedSign, unpackedExp, unpackedCoe, kind, sign, exp, coe)
+		}
+	})
+}
