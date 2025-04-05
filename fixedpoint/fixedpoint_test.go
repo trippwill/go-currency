@@ -37,6 +37,39 @@ func TestX64PackUnpackRoundtrip(t *testing.T) {
 	}
 }
 
+func TestX32PackUnpackRoundtrip(t *testing.T) {
+	var x X32
+	tests := []struct {
+		kind kind
+		sign sign
+		exp  int8
+		coe  uint32
+	}{
+		{kind_finite, sign_positive, 0, 1},
+		{kind_finite, sign_negative, -5, 12345},
+		{kind_infinity, sign_positive, 0, 0},
+		{kind_quiet, sign_negative, 0, 42},
+		{kind_finite, sign_negative, -95, 12345},
+	}
+
+	for _, test := range tests {
+		err := x.pack(test.kind, test.sign, test.exp, test.coe)
+		if err != nil {
+			t.Fatalf("pack failed: %v", err)
+		}
+
+		kind, sign, exp, coe, err := x.unpack()
+		if err != nil {
+			t.Fatalf("unpack failed: %v", err)
+		}
+
+		if kind != test.kind || sign != test.sign || exp != test.exp || coe != test.coe {
+			t.Errorf("roundtrip mismatch: got (%v, %v, %v, %v), want (%v, %v, %v, %v)",
+				kind, sign, exp, coe, test.kind, test.sign, test.exp, test.coe)
+		}
+	}
+}
+
 func FuzzX64PackUnpackRoundtrip(f *testing.F) {
 	f.Add(uint8(kind_finite), int8(sign_positive), int16(0), uint64(1))
 	f.Add(uint8(kind_finite), int8(sign_negative), int16(-10), uint64(12345))
@@ -80,39 +113,6 @@ func FuzzX64PackUnpackRoundtrip(f *testing.F) {
 				unpackedKind, unpackedSign, unpackedExp, unpackedCoe, kind(_kind), sign(_sign), exp, coe)
 		}
 	})
-}
-
-func TestX32PackUnpackRoundtrip(t *testing.T) {
-	var x X32
-	tests := []struct {
-		kind kind
-		sign sign
-		exp  int8
-		coe  uint32
-	}{
-		{kind_finite, sign_positive, 0, 1},
-		{kind_finite, sign_negative, -5, 12345},
-		{kind_infinity, sign_positive, 0, 0},
-		{kind_quiet, sign_negative, 0, 42},
-		{kind_finite, sign_negative, -105, 12345},
-	}
-
-	for _, test := range tests {
-		err := x.pack(test.kind, test.sign, test.exp, test.coe)
-		if err != nil {
-			t.Fatalf("pack failed: %v", err)
-		}
-
-		kind, sign, exp, coe, err := x.unpack()
-		if err != nil {
-			t.Fatalf("unpack failed: %v", err)
-		}
-
-		if kind != test.kind || sign != test.sign || exp != test.exp || coe != test.coe {
-			t.Errorf("roundtrip mismatch: got (%v, %v, %v, %v), want (%v, %v, %v, %v)",
-				kind, sign, exp, coe, test.kind, test.sign, test.exp, test.coe)
-		}
-	}
 }
 
 func FuzzX32PackUnpackRoundtrip(f *testing.F) {

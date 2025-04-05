@@ -20,7 +20,7 @@ func BenchmarkPack(b *testing.B) {
 }
 
 func BenchmarkUnpack(b *testing.B) {
-	x := X64(0x7FFFFFFFFFFFF) // Example packed value
+	x := X64{0x7FFFFFFFFFFFF} // Example packed value
 
 	for b.Loop() {
 		_, _, _, _, err := x.unpack()
