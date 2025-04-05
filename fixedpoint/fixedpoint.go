@@ -1,131 +1,73 @@
-// Base on the General Decimal Arithmetic Specification 1.70 – 7 Apr 2009
-// https://speleotrove.com/decimal/decarith.html
+// Package fixedpoint implements the IEEE 754-2008 Decimal Floating-Point Arithmetic standard
+// using the Binary Integer Decimal (BID) encoding.
 package fixedpoint
 
-// type FixedPoint[X X64 | X32] interface {
-// 	fmt.Stringer
-// 	Add(X) X
-// 	Sub(X) X
-// 	Mul(X) X
-// 	Div(X) X
-// }
-
-// var (
-//
-//	_ FixedPoint[X64] = (*X64)(nil)
-//	_ FixedPoint[X32] = (*X32)(nil)
-//
-// )
-type X64 struct {
-	uint64
-}
-
-type X32 struct {
-	uint32
-}
-
-type sign int8
+// Sign represents the sign of a decimal floating-point number
+type signc int8
 
 const (
-	sign_negative sign = -1 // Negative
-	sign_positive sign = 1  // Positive
-	sign_error    sign = 0  // Error
+	signc_negative signc = -1 // Negative
+	signc_positive signc = 1  // Positive
+	signc_error    signc = 0  // Error
 )
 
+// Kind represents the type of a decimal floating-point number
 type kind uint8
 
 const (
 	kind_signaling kind = iota // Signaling NaN
 	kind_quiet                 // Quiet NaN
-	kind_infinity              // flag_infinity
-	kind_finite                // flag_finite
+	kind_infinity              // Infinity
+	kind_finite                // Finite number
 )
 
-type form uint8
-
-const (
-	form_none  form = iota // Not finite form
-	form_small             // Small form
-	form_large             // Large form
-)
-
-// FixedPoint implements the Decimal Arithmetic Encoding for 128-bit decimal numbers.
-// See https://speleotrove.com/decimal/decbits.html
-
+// packed is an internal interface for decimal floating-point types
+// following the IEEE 754-2008 standard with BID encoding.
 type packed[E int8 | int16, C uint32 | uint64] interface {
-	pack(kind kind, sign sign, exp E, coe C) error
-	unpack() (kind, sign, E, C, error)
+	// pack converts the components of a decimal floating-point number
+	// into its BID encoding representation
+	pack(kind kind, sign signc, exp E, coe C) error
+
+	// unpack extracts the components of a decimal floating-point number
+	// from its BID encoding representation
+	unpack() (kind, signc, E, C, error)
+
+	// isZero returns true if the number is zero (positive or negative)
+	isZero() bool
+
+	// isNaN returns true if the number is Not-a-Number (quiet or signaling)
+	isNaN() bool
+
+	// isInf returns true if the number is infinity (positive or negative)
+	isInf() bool
 }
 
-var (
-	_ packed[int16, uint64] = (*X64)(nil)
-	_ packed[int8, uint32]  = (*X32)(nil)
-)
+// Create special values for decimal64 and decimal32
 
-type (
-	spec uint8
-)
-
-const (
-	mask_spec spec = 0b1_1111_110
-)
-
-func decode_spec(msb spec) (sign, kind, form, error) {
-	if msb == 0 {
-		return sign_positive, kind_finite, form_small, nil
+// new_special64 creates a special value (NaN, Infinity) for decimal64
+func new_special64(sign signc, kind kind) X64 {
+	var res X64
+	switch kind {
+	case kind_signaling, kind_quiet, kind_infinity:
+		if err := res.pack(kind, sign, 0, 0); err != nil {
+			panic(err)
+		}
+	default:
+		panic(newInternalError(res, "invalid kind"))
 	}
+	return res
+}
 
-	// Check for special values
-
-	switch msb & mask_spec {
-	case 0b1_1111_000:
-		return sign_negative, kind_infinity, form_none, nil
-	case 0b0_1111_000:
-		return sign_positive, kind_infinity, form_none, nil
-	case 0b1_1111_100:
-		return sign_negative, kind_quiet, form_none, nil
-	case 0b0_1111_100:
-		return sign_positive, kind_quiet, form_none, nil
-	case 0b1_1111_110:
-		return sign_negative, kind_signaling, form_none, nil
-	case 0b0_1111_110:
-		return sign_positive, kind_signaling, form_none, nil
+// new_special32 creates a special value (NaN, Infinity) for decimal32
+func new_special32(sign signc, kind kind) X32 {
+	var res X32
+	switch kind {
+	case kind_signaling, kind_quiet, kind_infinity:
+		if err := res.pack(kind, sign, 0, 0); err != nil {
+			panic(err)
+		}
+	default:
+		panic(newInternalError(res, "invalid kind"))
 	}
-
-	// The following patterns are for finite numbers
-
-	form_mask := spec(0b1_11_11_000)
-	switch msb & form_mask {
-	case 0b1_11_00_000:
-		fallthrough
-	case 0b1_11_01_000:
-		fallthrough
-	case 0b1_11_10_000:
-		return sign_negative, kind_finite, form_large, nil
-	case 0b0_11_00_000:
-		fallthrough
-	case 0b0_11_01_000:
-		fallthrough
-	case 0b0_11_10_000:
-		return sign_positive, kind_finite, form_large, nil
-	}
-
-	form_mask = spec(0b1_11_00_000)
-	switch msb & form_mask {
-	case 0b1_00_00_000:
-		fallthrough
-	case 0b1_01_00_000:
-		fallthrough
-	case 0b1_10_00_000:
-		return sign_negative, kind_finite, form_small, nil
-	case 0b0_00_00_000:
-		fallthrough
-	case 0b0_01_00_000:
-		fallthrough
-	case 0b0_10_00_000:
-		return sign_positive, kind_finite, form_small, nil
-	}
-
-	// If we reach here, the spec is not recognized
-	return sign_error, kind_signaling, form_none, newInternalError(msb, "invalid spec")
+	return res
 }

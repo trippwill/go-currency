@@ -7,8 +7,8 @@ import (
 func BenchmarkPack(b *testing.B) {
 	var x X64
 	kind := kind_finite
-	sign := sign_positive
-	exp := int16(1023)
+	sign := signc_positive
+	exp := int16(102)
 	coe := uint64(0x7FFFFFFFFFFFF)
 
 	for b.Loop() {
