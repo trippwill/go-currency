@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	cx := fp.BasicContext[fp.Context64]()
+	cx := fp.BasicContext64()
 
 	q := cx.Parse("-1234567.45")
 	fmt.Printf("%s\t%s\n", q.String(), q.Debug())
