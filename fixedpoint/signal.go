@@ -2,6 +2,8 @@ package fixedpoint
 
 import "strings"
 
+type Signal uint8
+
 const SignalClear Signal = 0
 
 const (

@@ -7,7 +7,7 @@ import (
 )
 
 func TestContext64Parse(t *testing.T) {
-	ctx := BasicContext[Context64]()
+	ctx := BasicContext64()
 
 	tests := []struct {
 		input      string
@@ -50,7 +50,7 @@ func TestContext64Parse(t *testing.T) {
 }
 
 func TestContext32Parse(t *testing.T) {
-	ctx := BasicContext[Context32]()
+	ctx := BasicContext32()
 
 	tests := []struct {
 		input      string

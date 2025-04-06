@@ -6,7 +6,16 @@ import (
 	"strings"
 )
 
-// context represents the context in which FixedPoint values are computed.
+// Context64 represents the context for computing 64-bit decimal floating-point numbers.
+type Context64 struct {
+	context
+}
+
+// Context32 represents the context for computing 32-bit decimal floating-point numbers.
+type Context32 struct {
+	context
+}
+
 type context struct {
 	traps     Signal    // The current signal traps.
 	signals   Signal    // The current signal state.
@@ -14,29 +23,10 @@ type context struct {
 	rounding  Rounding  // The rounding mode.
 }
 
-type (
-	Signal    uint8 // Signal represents the signal state of the context.
-	Precision uint8 // Precision represents the number of significant digits in a FixedPoint value.
-)
-
-const (
-	SignalInvalidOperation Signal = 1 << iota
-	SignalOverflow
-	SignalUnderflow
-	SignalConversionSyntax
-)
-
-const (
-	PrecisionDefault Precision = 9
-	PrecisionMinimum Precision = 7
-	PrecisionMaximum Precision = 11
-)
-
 // Default Basic Context Values.
 const (
-	BasicPrecision Precision = PrecisionDefault
-	BasicRounding  Rounding  = DefaultRoundingMode
-	BasicTraps     Signal    = SignalInvalidOperation | SignalOverflow | SignalUnderflow
+	BasicRounding Rounding = DefaultRoundingMode
+	BasicTraps    Signal   = SignalInvalidOperation | SignalOverflow | SignalUnderflow
 )
 
 // Default Extended Context values.
@@ -46,7 +36,7 @@ var ErrUnsupportedPrecision = fmt.Errorf("unsupported precision")
 
 // NewContext creates a new context with the specified precision, rounding mode, and enabled traps.
 func NewContext[C Context64 | Context32](precision Precision, rounding Rounding, traps Signal) (*C, error) {
-	if precision < PrecisionMinimum || precision > PrecisionMaximum {
+	if precision < PrecisionMinimum || precision > PrecisionMaximum64 {
 		return nil, ErrUnsupportedPrecision
 	}
 
@@ -60,19 +50,23 @@ func NewContext[C Context64 | Context32](precision Precision, rounding Rounding,
 	}, nil
 }
 
-type Context64 struct {
-	context
-}
-
-type Context32 struct {
-	context
-}
-
-// BasicContext returns a basic context with default values.
-func BasicContext[C Context32 | Context64]() *C {
-	return &C{
+// BasicContext32 returns a basic context with default values.
+func BasicContext32() *Context32 {
+	return &Context32{
 		context: context{
-			precision: BasicPrecision,
+			precision: PrecisionDefault32,
+			rounding:  BasicRounding,
+			traps:     BasicTraps,
+			signals:   Signal(0),
+		},
+	}
+}
+
+// BasicContext64 returns a basic context with default values.
+func BasicContext64() *Context64 {
+	return &Context64{
+		context: context{
+			precision: PrecisionDefault64,
 			rounding:  BasicRounding,
 			traps:     BasicTraps,
 			signals:   Signal(0),
@@ -87,20 +81,20 @@ func (ctx *Context64) Parse(s string) X64 {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		ctx.signals |= SignalConversionSyntax
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	// Handle special values (case-insensitive).
 	lower := strings.ToLower(s)
 	switch lower {
 	case "nan", "+nan":
-		return new_special64(signc_positive, kind_quiet)
+		return newSpecial64(signc_positive, kind_quiet)
 	case "-nan":
-		return new_special64(signc_negative, kind_quiet)
+		return newSpecial64(signc_negative, kind_quiet)
 	case "inf", "infinity", "+inf", "+infinity":
-		return new_special64(signc_positive, kind_infinity)
+		return newSpecial64(signc_positive, kind_infinity)
 	case "-inf", "-infinity":
-		return new_special64(signc_negative, kind_infinity)
+		return newSpecial64(signc_negative, kind_infinity)
 	}
 
 	// Determine s_sign.
@@ -117,7 +111,7 @@ func (ctx *Context64) Parse(s string) X64 {
 	parts := strings.Split(s, ".")
 	if len(parts) > 2 {
 		ctx.signals |= SignalConversionSyntax
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	intPart := parts[0]
@@ -127,7 +121,7 @@ func (ctx *Context64) Parse(s string) X64 {
 	}
 	if intPart == "" && fracPart == "" {
 		ctx.signals |= SignalConversionSyntax
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	// Concatenate the integer and fractional digits.
@@ -137,7 +131,7 @@ func (ctx *Context64) Parse(s string) X64 {
 	value, err := strconv.ParseUint(digits, 10, 64)
 	if err != nil {
 		ctx.signals |= SignalConversionSyntax
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	// Determine the exponent.
@@ -148,14 +142,14 @@ func (ctx *Context64) Parse(s string) X64 {
 	// Check for coefficient overflow.
 	if coe > MaxCoefficient64 || exp > Emax64 {
 		ctx.signals |= SignalOverflow
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	var a X64
 	err = a.pack(kind_finite, s_sign, exp, coe)
 	if err != nil {
 		ctx.signals |= SignalConversionSyntax
-		return new_special64(signc_positive, kind_signaling)
+		return newSpecial64(signc_positive, kind_signaling)
 	}
 
 	return a
@@ -170,20 +164,20 @@ func (ctx *Context32) Parse(s string) X32 {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		ctx.signals |= SignalConversionSyntax
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	// Handle special values (case-insensitive).
 	lower := strings.ToLower(s)
 	switch lower {
 	case "nan", "+nan":
-		return new_special32(signc_positive, kind_quiet)
+		return newSpecial32(signc_positive, kind_quiet)
 	case "-nan":
-		return new_special32(signc_negative, kind_quiet)
+		return newSpecial32(signc_negative, kind_quiet)
 	case "inf", "infinity", "+inf", "+infinity":
-		return new_special32(signc_positive, kind_infinity)
+		return newSpecial32(signc_positive, kind_infinity)
 	case "-inf", "-infinity":
-		return new_special32(signc_negative, kind_infinity)
+		return newSpecial32(signc_negative, kind_infinity)
 	}
 
 	// Determine s_sign.
@@ -200,7 +194,7 @@ func (ctx *Context32) Parse(s string) X32 {
 	parts := strings.Split(s, ".")
 	if len(parts) > 2 {
 		ctx.signals |= SignalConversionSyntax
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	intPart := parts[0]
@@ -210,7 +204,7 @@ func (ctx *Context32) Parse(s string) X32 {
 	}
 	if intPart == "" && fracPart == "" {
 		ctx.signals |= SignalConversionSyntax
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	// Concatenate the integer and fractional digits.
@@ -220,7 +214,7 @@ func (ctx *Context32) Parse(s string) X32 {
 	value, err := strconv.ParseUint(digits, 10, 32)
 	if err != nil {
 		ctx.signals |= SignalConversionSyntax
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	// Determine the exponent.
@@ -231,14 +225,14 @@ func (ctx *Context32) Parse(s string) X32 {
 	// Check for coefficient overflow.
 	if coe > MaxCoefficient32 || exp > Emax32 {
 		ctx.signals |= SignalOverflow
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	var a X32
 	err = a.pack(kind_finite, s_sign, exp, coe)
 	if err != nil {
 		ctx.signals |= SignalConversionSyntax
-		return new_special32(signc_positive, kind_signaling)
+		return newSpecial32(signc_positive, kind_signaling)
 	}
 
 	return a

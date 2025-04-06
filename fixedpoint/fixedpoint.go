@@ -44,8 +44,8 @@ type packed[E int8 | int16, C uint32 | uint64] interface {
 
 // Create special values for decimal64 and decimal32
 
-// new_special64 creates a special value (NaN, Infinity) for decimal64
-func new_special64(sign signc, kind kind) X64 {
+// newSpecial64 creates a special value (NaN, Infinity) for decimal64
+func newSpecial64(sign signc, kind kind) X64 {
 	var res X64
 	switch kind {
 	case kind_signaling, kind_quiet, kind_infinity:
@@ -58,8 +58,8 @@ func new_special64(sign signc, kind kind) X64 {
 	return res
 }
 
-// new_special32 creates a special value (NaN, Infinity) for decimal32
-func new_special32(sign signc, kind kind) X32 {
+// newSpecial32 creates a special value (NaN, Infinity) for decimal32
+func newSpecial32(sign signc, kind kind) X32 {
 	var res X32
 	switch kind {
 	case kind_signaling, kind_quiet, kind_infinity:
