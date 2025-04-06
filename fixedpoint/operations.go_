@@ -9,21 +9,21 @@ import (
 // FixedPointOperations defines a set of arithmetic operations for fixed point numbers.
 type FixedPointOperations interface {
 	// Neg returns the negation of the FixedPoint.
-	Neg(*Context) FixedPoint
+	Neg(*Context) X128
 	// Add returns the sum of this FixedPoint and another.
-	Add(FixedPoint, *Context) FixedPoint
+	Add(X128, *Context) X128
 	// Sub returns the difference between this FixedPoint and another.
-	Sub(FixedPoint, *Context) FixedPoint
+	Sub(X128, *Context) X128
 	// Mul returns the product of this FixedPoint and another.
-	Mul(FixedPoint, *Context) FixedPoint
+	Mul(X128, *Context) X128
 	// Div returns the quotient of this FixedPoint divided by another.
-	Div(FixedPoint, *Context) FixedPoint
+	Div(X128, *Context) X128
 	// Abs returns the absolute value of this FixedPoint.
-	Abs(*Context) FixedPoint
+	Abs(*Context) X128
 	// Compare compares this FixedPoint with another.
 	// It returns -1 if this FixedPoint is less than the other, 0 if they are equal,
 	// and 1 if this FixedPoint is greater than the other.
-	Compare(FixedPoint, *Context) int
+	Compare(X128, *Context) int
 }
 
 var (
@@ -32,7 +32,7 @@ var (
 	_ FixedPointOperations = (*NaN)(nil)
 )
 
-func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
+func (a *FiniteNumber) Add(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -96,7 +96,7 @@ func (a *FiniteNumber) Add(right FixedPoint, ctx *Context) FixedPoint {
 	panic(errUnsupportedType(a))
 }
 
-func (a *Infinity) Add(right FixedPoint, ctx *Context) FixedPoint {
+func (a *Infinity) Add(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -123,7 +123,7 @@ func (a *Infinity) Add(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *NaN) Add(right FixedPoint, ctx *Context) FixedPoint {
+func (a *NaN) Add(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -131,12 +131,12 @@ func (a *NaN) Add(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *FiniteNumber) Sub(b FixedPoint, ctx *Context) FixedPoint {
+func (a *FiniteNumber) Sub(b X128, ctx *Context) X128 {
 	b_neg := b.Neg(ctx)
 	return a.Add(b_neg, ctx)
 }
 
-func (a *Infinity) Sub(right FixedPoint, ctx *Context) FixedPoint {
+func (a *Infinity) Sub(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -157,14 +157,14 @@ func (a *Infinity) Sub(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *NaN) Sub(right FixedPoint, ctx *Context) FixedPoint {
+func (a *NaN) Sub(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
 	panic(a)
 }
 
-func (a *FiniteNumber) Mul(right FixedPoint, ctx *Context) FixedPoint {
+func (a *FiniteNumber) Mul(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -195,7 +195,7 @@ func (a *FiniteNumber) Mul(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *Infinity) Mul(right FixedPoint, ctx *Context) FixedPoint {
+func (a *Infinity) Mul(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -217,7 +217,7 @@ func (a *Infinity) Mul(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *NaN) Mul(right FixedPoint, ctx *Context) FixedPoint {
+func (a *NaN) Mul(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -234,7 +234,7 @@ func mul_exp(a_exp, b_exp int16) int16 {
 	return b_exp + a_exp
 }
 
-func (a *FiniteNumber) Div(right FixedPoint, ctx *Context) FixedPoint {
+func (a *FiniteNumber) Div(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -291,7 +291,7 @@ func (a *FiniteNumber) Div(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *Infinity) Div(right FixedPoint, ctx *Context) FixedPoint {
+func (a *Infinity) Div(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -313,7 +313,7 @@ func (a *Infinity) Div(right FixedPoint, ctx *Context) FixedPoint {
 	panic(a)
 }
 
-func (a *NaN) Div(right FixedPoint, ctx *Context) FixedPoint {
+func (a *NaN) Div(right X128, ctx *Context) X128 {
 	if res, ok := val_operands(a, right, ctx); !ok {
 		return res
 	}
@@ -321,7 +321,7 @@ func (a *NaN) Div(right FixedPoint, ctx *Context) FixedPoint {
 }
 
 // Neg returns the negation of the FixedPoint.
-func (a *FiniteNumber) Neg(ctx *Context) FixedPoint {
+func (a *FiniteNumber) Neg(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -331,7 +331,7 @@ func (a *FiniteNumber) Neg(ctx *Context) FixedPoint {
 	return new(FiniteNumber).Init(!sign, a.coe, exp)
 }
 
-func (a *Infinity) Neg(ctx *Context) FixedPoint {
+func (a *Infinity) Neg(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -340,7 +340,7 @@ func (a *Infinity) Neg(ctx *Context) FixedPoint {
 	return new(Infinity).Init(!a.sign)
 }
 
-func (a *NaN) Neg(ctx *Context) FixedPoint {
+func (a *NaN) Neg(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -349,7 +349,7 @@ func (a *NaN) Neg(ctx *Context) FixedPoint {
 	return new(NaN).Init(false, 2)
 }
 
-func (a *FiniteNumber) Abs(ctx *Context) FixedPoint {
+func (a *FiniteNumber) Abs(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -360,7 +360,7 @@ func (a *FiniteNumber) Abs(ctx *Context) FixedPoint {
 	return new(FiniteNumber).Init(false, a.coe, exp)
 }
 
-func (a *Infinity) Abs(ctx *Context) FixedPoint {
+func (a *Infinity) Abs(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -369,7 +369,7 @@ func (a *Infinity) Abs(ctx *Context) FixedPoint {
 	return new(Infinity).Init(false)
 }
 
-func (a *NaN) Abs(ctx *Context) FixedPoint {
+func (a *NaN) Abs(ctx *Context) X128 {
 	if a == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new_snan()
@@ -378,7 +378,7 @@ func (a *NaN) Abs(ctx *Context) FixedPoint {
 	return a.Clone()
 }
 
-func (a *FiniteNumber) Compare(b FixedPoint, ctx *Context) int {
+func (a *FiniteNumber) Compare(b X128, ctx *Context) int {
 	a_sign, a_exp := unpack_sign_exp(a.sign_exp)
 	switch b := b.(type) {
 	case *NaN:
@@ -439,7 +439,7 @@ func errUnsupportedType(a any) error {
 	return fmt.Errorf("unsupported FixedPoint type: %T", a)
 }
 
-func (a *Infinity) Compare(b FixedPoint, _ *Context) int {
+func (a *Infinity) Compare(b X128, _ *Context) int {
 	switch b := b.(type) {
 	case *NaN:
 		return 1
@@ -461,7 +461,7 @@ func (a *Infinity) Compare(b FixedPoint, _ *Context) int {
 	panic(errUnsupportedType(a))
 }
 
-func (a *NaN) Compare(b FixedPoint, _ *Context) int {
+func (a *NaN) Compare(b X128, _ *Context) int {
 	// NaN compares equal to another NaN; otherwise, it is considered less.
 	if _, ok := b.(*NaN); ok {
 		return 0
@@ -469,11 +469,11 @@ func (a *NaN) Compare(b FixedPoint, _ *Context) int {
 	return -1
 }
 
-func new_snan() FixedPoint {
+func new_snan() X128 {
 	return new(NaN).Init(true, 3)
 }
 
-func new_qnan() FixedPoint {
+func new_qnan() X128 {
 	return new(NaN).Init(false, 3)
 }
 
@@ -531,7 +531,7 @@ func safe_mul[C ~uint64](x, y C) (C, bool) {
 // if operands are valid for computation, it returns nil, true.
 // if operands are invalid, it returns one of the original NaN values and false.
 // if either operand is nil, it returns a new NaN and false.
-func val_operands(a, b FixedPoint, ctx *Context) (FixedPoint, bool) {
+func val_operands(a, b X128, ctx *Context) (X128, bool) {
 	if a == nil || b == nil {
 		ctx.signals |= SignalInvalidOperation
 		return new(NaN).Init(true, 2), false
@@ -603,7 +603,7 @@ func scale_round(sign bool, dividend coefficient, divisor coefficient, ctx *Cont
 
 // apply_precision rounds a FiniteNumber based on context.precision and context.rounding.
 // the resulting coefficient is adjusted to the desired precision.
-func apply_precision(fn *FiniteNumber, ctx *Context) FixedPoint {
+func apply_precision(fn *FiniteNumber, ctx *Context) X128 {
 	digits := dlen(fn.coe)
 	prec := int(ctx.precision)
 	if digits == prec {

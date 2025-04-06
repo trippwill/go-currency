@@ -2,129 +2,230 @@ package fixedpoint
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
-// Debug returns a formatted string with debug information about the FixedPoint.
-func (a *FiniteNumber) Debug() string {
-	if a == nil {
-		return "nil"
-	}
-	sign, exp := unpack_sign_exp(a.sign_exp)
-	sr := '+'
-	if sign {
-		sr = '-'
-	}
-	return fmt.Sprintf("fn{%c, %d, %d}", sr, a.coe, exp)
-}
-
-// Debug returns a formatted string with debug information about the Infinity.
-func (a *Infinity) Debug() string {
-	if a == nil {
-		return "nil"
-	}
-	sign := '+'
-	if a.sign {
-		sign = '-'
-	}
-	return fmt.Sprintf("inf{%c}", sign)
-}
-
-func (a *NaN) Debug() string {
-	if a == nil {
-		return "nil"
-	}
-	sign := '+'
-	if a.sign {
-		sign = '-'
+// String implements the fmt.Stringer interface for X64.
+// It returns a human-readable representation of the X64 decimal floating-point number.
+func (x X64) String() string {
+	k, sign, exp, coe, err := x.unpack()
+	if err != nil {
+		return fmt.Sprintf("X64{ERROR: %v}", err)
 	}
 
-	if diagnostic, ok := DecodePayload(a.diag); ok {
-		return fmt.Sprintf("nan{%c, %v}", sign, diagnostic)
-	}
-
-	return fmt.Sprintf("nan{%c, %d}", sign, a.diag)
-}
-
-// String returns a string representation as a decimal number.
-func (fn *FiniteNumber) String() string {
-	if fn == nil {
-		return "nil"
-	}
-
-	sign, exp := unpack_sign_exp(fn.sign_exp)
-	prec := dlen(fn.coe)
-
-	// Fast path for zero coefficient.
-	if fn.coe == 0 {
-		if prec > 1 {
-			return "0." + strings.Repeat("0", prec-1)
+	switch k {
+	case kind_quiet:
+		if sign == signc_negative {
+			return "-qNaN"
 		}
-		return "0."
+		return "qNaN"
+	case kind_signaling:
+		if sign == signc_negative {
+			return "-sNaN"
+		}
+		return "sNaN"
+	case kind_infinity:
+		if sign == signc_negative {
+			return "-Infinity"
+		}
+		return "Infinity"
 	}
 
-	coe_str := fmt.Sprintf("%d", fn.coe)
-	pos := len(coe_str) + int(exp)
-	var int_part, frac_part string
+	// For finite numbers, handle the sign, coefficient, and exponent
+	signStr := ""
+	if sign == signc_negative {
+		signStr = "-"
+	}
 
-	switch {
-	case exp < 0 && pos <= 0:
-		int_part = "0"
-		frac_part = strings.Repeat("0", -pos) + coe_str
-	case exp < 0:
-		int_part = coe_str[:pos]
-		frac_part = coe_str[pos:]
-	case exp > 0:
-		int_part = coe_str + strings.Repeat("0", int(exp))
-		frac_part = ""
+	// If coefficient is zero, return "0"
+	if coe == 0 {
+		return signStr + "0"
+	}
+
+	coeStr := strconv.FormatUint(coe, 10)
+
+	// Apply scientific notation if the exponent is out of a reasonable range
+	absExp := exp
+	if absExp < 0 {
+		absExp = -absExp
+	}
+
+	if absExp > 6 {
+		// Scientific notation: c.ccc...e±exp
+		digits := len(coeStr)
+		adjExp := exp + int16(digits-1)
+
+		// Format the coefficient with decimal point
+		var formatted string
+		if digits > 1 {
+			formatted = coeStr[:1] + "." + coeStr[1:]
+		} else {
+			formatted = coeStr + ".0"
+		}
+
+		// Trim trailing zeros after decimal point, but keep at least one digit
+		parts := strings.Split(formatted, ".")
+		parts[1] = strings.TrimRight(parts[1], "0")
+		if parts[1] == "" {
+			parts[1] = "0"
+		}
+		formatted = parts[0] + "." + parts[1]
+
+		return fmt.Sprintf("%s%se%+d", signStr, formatted, adjExp)
+	}
+
+	// Regular decimal notation
+	if exp >= 0 {
+		// Positive exponent - append zeros
+		return signStr + coeStr + strings.Repeat("0", int(exp))
+	} else {
+		// Negative exponent - insert decimal point
+		absExp := int(-exp)
+		if absExp >= len(coeStr) {
+			// Need to prepend zeros: 0.000ccc
+			zeros := strings.Repeat("0", absExp-len(coeStr))
+			return signStr + "0." + zeros + coeStr
+		} else {
+			// Insert decimal point: cc.ccc
+			pos := len(coeStr) - absExp
+			return signStr + coeStr[:pos] + "." + coeStr[pos:]
+		}
+	}
+}
+
+// Debug returns a debug representation of the X64 value showing the internal components.
+func (x X64) Debug() string {
+	k, sign, exp, coe, err := x.unpack()
+	if err != nil {
+		return fmt.Sprintf("X64{ERROR: %v}", err)
+	}
+
+	signChar := '+'
+	if sign == signc_negative {
+		signChar = '-'
+	}
+
+	switch k {
+	case kind_quiet:
+		return fmt.Sprintf("X64{qNaN, %c}", signChar)
+	case kind_signaling:
+		return fmt.Sprintf("X64{sNaN, %c}", signChar)
+	case kind_infinity:
+		return fmt.Sprintf("X64{Inf, %c}", signChar)
 	default:
-		int_part = coe_str
-		frac_part = ""
+		return fmt.Sprintf("X64{%c, %d, %d}", signChar, coe, exp)
 	}
-
-	frac_part = strings.TrimRight(frac_part, "0")
-	if frac_part == "" {
-		frac_part = "0"
-	}
-
-	// Build result and trim unnecessary zeros.
-	result := int_part + "." + frac_part
-	result = strings.TrimRight(result, "0")
-
-	// Ensure the numeric part (excluding the decimal point) meets the precision.
-	if len(result)-1 < prec {
-		result += strings.Repeat("0", prec-(len(result)-1))
-	}
-
-	// Apply sign: note that sign being true implies a negative number.
-	if sign {
-		result = "-" + result
-	}
-
-	return result
 }
 
-// String returns a string representation of the Infinity.
-func (a *Infinity) String() string {
-	if a.sign {
-		return "-Infinity"
+// String implements the fmt.Stringer interface for X32.
+// It returns a human-readable representation of the X32 decimal floating-point number.
+func (x X32) String() string {
+	k, sign, exp, coe, err := x.unpack()
+	if err != nil {
+		return fmt.Sprintf("X32{ERROR: %v}", err)
 	}
-	return "Infinity"
-}
 
-// String returns a string representation of the NaN.
-func (a *NaN) String() string {
-	sign := '+'
-	if a.sign {
-		sign = '-'
+	switch k {
+	case kind_quiet:
+		if sign == signc_negative {
+			return "-qNaN"
+		}
+		return "qNaN"
+	case kind_signaling:
+		if sign == signc_negative {
+			return "-sNaN"
+		}
+		return "sNaN"
+	case kind_infinity:
+		if sign == signc_negative {
+			return "-Infinity"
+		}
+		return "Infinity"
 	}
-	return fmt.Sprintf("%cNaN{%v}", sign, a.diag)
+
+	// For finite numbers, handle the sign, coefficient, and exponent
+	signStr := ""
+	if sign == signc_negative {
+		signStr = "-"
+	}
+
+	// If coefficient is zero, return "0"
+	if coe == 0 {
+		return signStr + "0"
+	}
+
+	coeStr := strconv.FormatUint(uint64(coe), 10)
+
+	// Apply scientific notation if the exponent is out of a reasonable range
+	absExp := exp
+	if absExp < 0 {
+		absExp = -absExp
+	}
+
+	if absExp > 6 {
+		// Scientific notation: c.ccc...e±exp
+		digits := len(coeStr)
+		adjExp := exp + int8(digits-1)
+
+		// Format the coefficient with decimal point
+		var formatted string
+		if digits > 1 {
+			formatted = coeStr[:1] + "." + coeStr[1:]
+		} else {
+			formatted = coeStr + ".0"
+		}
+
+		// Trim trailing zeros after decimal point, but keep at least one digit
+		parts := strings.Split(formatted, ".")
+		parts[1] = strings.TrimRight(parts[1], "0")
+		if parts[1] == "" {
+			parts[1] = "0"
+		}
+		formatted = parts[0] + "." + parts[1]
+
+		return fmt.Sprintf("%s%se%+d", signStr, formatted, adjExp)
+	}
+
+	// Regular decimal notation
+	if exp >= 0 {
+		// Positive exponent - append zeros
+		return signStr + coeStr + strings.Repeat("0", int(exp))
+	} else {
+		// Negative exponent - insert decimal point
+		absExp := int(-exp)
+		if absExp >= len(coeStr) {
+			// Need to prepend zeros: 0.000ccc
+			zeros := strings.Repeat("0", absExp-len(coeStr))
+			return signStr + "0." + zeros + coeStr
+		} else {
+			// Insert decimal point: cc.ccc
+			pos := len(coeStr) - absExp
+			return signStr + coeStr[:pos] + "." + coeStr[pos:]
+		}
+	}
 }
 
-func (c Context) Debug() string {
-	return fmt.Sprintf("%s:%v:%s[%s]", c.rounding.Debug(), c.precision, c.signals.Debug(), c.traps.Debug())
-}
+// Debug returns a debug representation of the X32 value showing the internal components.
+func (x X32) Debug() string {
+	k, sign, exp, coe, err := x.unpack()
+	if err != nil {
+		return fmt.Sprintf("X32{ERROR: %v}", err)
+	}
 
-func (c Context) String() string {
-	return fmt.Sprintf("context{precision: %v, rounding: %s,  traps: %s}", c.precision, c.rounding, c.traps)
+	signChar := '+'
+	if sign == signc_negative {
+		signChar = '-'
+	}
+
+	switch k {
+	case kind_quiet:
+		return fmt.Sprintf("X32{qNaN, %c}", signChar)
+	case kind_signaling:
+		return fmt.Sprintf("X32{sNaN, %c}", signChar)
+	case kind_infinity:
+		return fmt.Sprintf("X32{Inf, %c}", signChar)
+	default:
+		return fmt.Sprintf("X32{%c, %d, %d}", signChar, coe, exp)
+	}
 }

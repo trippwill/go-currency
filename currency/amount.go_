@@ -8,7 +8,7 @@ import (
 var DefaultContext = fp.BasicContext()
 
 type Amount[C Currency] struct {
-	Value    fp.FixedPoint
+	Value    fp.X128
 	Currency C
 }
 
@@ -36,7 +36,7 @@ func (a Amount[C]) Sub(b Amount[C]) Amount[C] {
 	}
 }
 
-func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
+func (a Amount[C]) Mul(factor fp.X128) Amount[C] {
 	product := a.Value.Mul(factor, DefaultContext)
 	return Amount[C]{
 		Value:    product,
@@ -44,7 +44,7 @@ func (a Amount[C]) Mul(factor fp.FixedPoint) Amount[C] {
 	}
 }
 
-func (a Amount[C]) Div(divisor fp.FixedPoint) (Amount[C], error) {
+func (a Amount[C]) Div(divisor fp.X128) (Amount[C], error) {
 	quotient := a.Value.Div(divisor, DefaultContext)
 	return Amount[C]{
 		Value:    quotient,
@@ -76,7 +76,7 @@ func (a Amount[C]) Equal(b Amount[C]) bool {
 	return DefaultContext.Equal(a.Value, b.Value)
 }
 
-func Convert[C, D Currency](a Amount[C], factor fp.FixedPoint) Amount[D] {
+func Convert[C, D Currency](a Amount[C], factor fp.X128) Amount[D] {
 	// Convert the amount using the conversion factor
 	converted := a.Mul(factor)
 
