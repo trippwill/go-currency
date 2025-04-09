@@ -68,7 +68,7 @@ func TestQuantizationRounding(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// For this test, we need to implement a quantize function
 			// that adjusts the exponent while preserving the value
-			result := quantize(tt.value, tt.expTarget, tt.mode)
+			result, _ := quantize64(tt.value, tt.expTarget, tt.mode)
 			got := result.String()
 			if got != tt.expected {
 				t.Errorf("quantize() = %q, want %q", got, tt.expected)

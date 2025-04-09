@@ -140,7 +140,7 @@ func (ctx *Context64) Parse(s string) X64 {
 	coe := value
 
 	// Check for coefficient overflow.
-	if coe > MaxCoefficient64 || exp > Emax64 {
+	if coe > maxCoefficient64 || exp > eMax64 {
 		ctx.signals |= SignalOverflow
 		return newSpecial64(signc_positive, kind_signaling)
 	}
@@ -223,7 +223,7 @@ func (ctx *Context32) Parse(s string) X32 {
 	coe := uint32(value)
 
 	// Check for coefficient overflow.
-	if coe > MaxCoefficient32 || exp > Emax32 {
+	if coe > maxCoefficient32 || exp > eMax32 {
 		ctx.signals |= SignalOverflow
 		return newSpecial32(signc_positive, kind_signaling)
 	}
@@ -259,7 +259,7 @@ func (ctx *Context64) Clone(clear bool) *Context64 {
 	}
 }
 
-func (ctx *Context32) CLone(clear bool) *Context32 {
+func (ctx *Context32) Clone(clear bool) *Context32 {
 	if ctx == nil {
 		return nil
 	}

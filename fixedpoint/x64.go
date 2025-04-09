@@ -12,18 +12,18 @@ var _ packed[int16, uint64] = (*X64)(nil)
 
 // Constants for decimal64 format according to IEEE 754-2008
 const (
-	// Elimit64 is the maximum encoded exponent value (3 * 2^ecbits - 1)
-	Elimit64 int16 = 767 // 3 * 2^8 - 1
-	// Emax64 is the maximum decoded exponent value ((Elimit/2) + 1)
-	Emax64 int16 = 384 // (767/2) + 1
-	// Emin64 is the minimum decoded exponent value (-Elimit/2)
-	Emin64 int16 = -383 // -767/2
-	// Etiny64 is the exponent of the smallest possible subnormal (Emin - (precision-1))
-	Etiny64 int16 = -398 // -383 - (16-1)
-	// Bias64 is the value to add to decoded exponent to get encoded exponent (-Emin + precision - 1)
-	Bias64 int16 = 398 // -(-383) + 16 - 1
-	// MaxCoefficient64 is the maximum coefficient value (10^precision - 1)
-	MaxCoefficient64 uint64 = 9999999999999999 // 10^16 - 1
+	// eLimit64 is the maximum encoded exponent value (3 * 2^ecbits - 1)
+	eLimit64 int16 = 767 // 3 * 2^8 - 1
+	// eMax64 is the maximum decoded exponent value ((Elimit/2) + 1)
+	eMax64 int16 = 384 // (767/2) + 1
+	// eMin64 is the minimum decoded exponent value (-Elimit/2)
+	eMin64 int16 = -383 // -767/2
+	// eTiny64 is the exponent of the smallest possible subnormal (Emin - (precision-1))
+	eTiny64 int16 = -398 // -383 - (16-1)
+	// bias64 is the value to add to decoded exponent to get encoded exponent (-Emin + precision - 1)
+	bias64 int16 = 398 // -(-383) + 16 - 1
+	// maxCoefficient64 is the maximum coefficient value (10^precision - 1)
+	maxCoefficient64 uint64 = 9999999999999999 // 10^16 - 1
 )
 
 func (x *X64) Pack(k kind, sign signc, exp int16, coe uint64) error {
@@ -45,17 +45,17 @@ func (x *X64) pack(k kind, sign signc, exp int16, coe uint64) error {
 		return newInternalError(sign, "invalid sign")
 	}
 
-	if coe > MaxCoefficient64 && k == kind_finite {
+	if coe > maxCoefficient64 && k == kind_finite {
 		return newInternalError(coe, "coefficient overflow")
 	}
 
-	if (exp > Emax64 || exp < Emin64) && k == kind_finite {
+	if (exp > eMax64 || exp < eMin64) && k == kind_finite {
 		return newInternalError(exp, "exponent out of range")
 	}
 
 	// Check for subnormal values (non-zero coefficient with minimum exponent)
 	// and return a signaling NaN immediately
-	if k == kind_finite && exp == Emin64 && coe > 0 {
+	if k == kind_finite && exp == eMin64 && coe > 0 {
 		// Set as signaling NaN
 		x.uint64 = 0x7E00000000000000
 		if sign == signc_negative {
@@ -76,7 +76,7 @@ func (x *X64) pack(k kind, sign signc, exp int16, coe uint64) error {
 	switch k {
 	case kind_finite:
 		// Add bias to get encoded exponent
-		biasedExp := uint64(exp + Bias64)
+		biasedExp := uint64(exp + bias64)
 
 		// Check if coefficient fits in 53 bits (2^53 = 9007199254740992)
 		if coe < (1 << 53) {
@@ -160,7 +160,7 @@ func (x *X64) unpack() (kind, signc, int16, uint64, error) {
 		// Extract encoded exponent: 2 bits in combination field + 8 bits in exponent continuation field
 		encodedExp := int16(((bits >> 61) & 0x3) << 8)
 		encodedExp |= int16((bits >> 51) & 0xFF)
-		exp = encodedExp - Bias64 // Remove bias to get decoded exponent
+		exp = encodedExp - bias64 // Remove bias to get decoded exponent
 
 		// Extract coefficient
 		coe = bits & 0x7FFFFFFFFFFFF
@@ -168,7 +168,7 @@ func (x *X64) unpack() (kind, signc, int16, uint64, error) {
 		// Normal format
 		// Extract encoded exponent: 10 bits after sign
 		encodedExp := int16((bits >> 53) & 0x3FF)
-		exp = encodedExp - Bias64 // Remove bias to get decoded exponent
+		exp = encodedExp - bias64 // Remove bias to get decoded exponent
 
 		// Extract coefficient
 		coe = bits & 0x1FFFFFFFFFFFFF
@@ -234,8 +234,8 @@ func (x *X64) Round(mode Rounding, precision uint) error {
 	}
 
 	// For special cases of subnormal or extreme values
-	if exp < Emin64 || exp > Emax64 {
-		if exp < Emin64 {
+	if exp < eMin64 || exp > eMax64 {
+		if exp < eMin64 {
 			// If exponent is too small, try to adjust by reducing precision
 			// This is a simplification - full subnormal handling would be more complex
 			if newCoe == 0 {
@@ -243,20 +243,20 @@ func (x *X64) Round(mode Rounding, precision uint) error {
 				exp = 0
 			} else if (newCoe % 10) == 0 {
 				// Can shift right to increase exponent
-				for exp < Emin64 && (newCoe%10) == 0 {
+				for exp < eMin64 && (newCoe%10) == 0 {
 					newCoe /= 10
 					exp++
 				}
 			}
 
 			// If still too small, return error or set to zero
-			if exp < Emin64 {
+			if exp < eMin64 {
 				if newCoe == 0 {
 					return x.pack(kind_finite, sign, 0, 0) // Return zero
 				}
 				return newInternalError(exp, "exponent out of range")
 			}
-		} else if exp > Emax64 {
+		} else if exp > eMax64 {
 			// If exponent is too large, return infinity
 			return x.pack(kind_infinity, sign, 0, 0)
 		}

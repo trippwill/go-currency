@@ -10,18 +10,18 @@ var _ packed[int8, uint32] = (*X32)(nil)
 
 // Constants for decimal32 format according to IEEE 754-2008
 const (
-	// Elimit32 is the maximum encoded exponent value (3 * 2^ecbits - 1)
-	Elimit32 int16 = 191 // 3 * 2^6 - 1
-	// Emax32 is the maximum decoded exponent value ((Elimit/2) + 1)
-	Emax32 int8 = 96 // (191/2) + 1
-	// Emin32 is the minimum decoded exponent value (-Elimit/2)
-	Emin32 int8 = -95 // -191/2
-	// Etiny32 is the exponent of the smallest possible subnormal (Emin - (precision-1))
-	Etiny32 int16 = -101 // -95 - (7-1)
-	// Bias32 is the value to add to decoded exponent to get encoded exponent (-Emin + precision - 1)
-	Bias32 int16 = 101 // -(-95) + 7 - 1
-	// MaxCoefficient32 is the maximum coefficient value (10^precision - 1)
-	MaxCoefficient32 uint32 = 9999999 // 10^7 - 1
+	// eLimit32 is the maximum encoded exponent value (3 * 2^ecbits - 1)
+	eLimit32 int16 = 191 // 3 * 2^6 - 1
+	// eMax32 is the maximum decoded exponent value ((Elimit/2) + 1)
+	eMax32 int8 = 96 // (191/2) + 1
+	// eMin32 is the minimum decoded exponent value (-Elimit/2)
+	eMin32 int8 = -95 // -191/2
+	// eTiny32 is the exponent of the smallest possible subnormal (Emin - (precision-1))
+	eTiny32 int16 = -101 // -95 - (7-1)
+	// bias32 is the value to add to decoded exponent to get encoded exponent (-Emin + precision - 1)
+	bias32 int16 = 101 // -(-95) + 7 - 1
+	// maxCoefficient32 is the maximum coefficient value (10^precision - 1)
+	maxCoefficient32 uint32 = 9999999 // 10^7 - 1
 )
 
 // pack implements the packed interface by encoding components into BID format.
@@ -35,17 +35,17 @@ func (x *X32) pack(k kind, sign signc, exp int8, coe uint32) error {
 		return newInternalError(sign, "invalid sign")
 	}
 
-	if coe > MaxCoefficient32 && k == kind_finite {
+	if coe > maxCoefficient32 && k == kind_finite {
 		return newInternalError(coe, "coefficient overflow")
 	}
 
-	if (exp > Emax32 || exp < Emin32) && k == kind_finite {
+	if (exp > eMax32 || exp < eMin32) && k == kind_finite {
 		return newInternalError(exp, "exponent out of range")
 	}
 
 	// Check for subnormal values (non-zero coefficient with minimum exponent)
 	// and return a signaling NaN immediately
-	if k == kind_finite && exp == Emin32 && coe > 0 {
+	if k == kind_finite && exp == eMin32 && coe > 0 {
 		// Set as signaling NaN
 		x.uint32 = 0x7E000000
 		if sign == signc_negative {
@@ -66,7 +66,7 @@ func (x *X32) pack(k kind, sign signc, exp int8, coe uint32) error {
 	switch k {
 	case kind_finite:
 		// Add bias to get encoded exponent
-		biasedExp := uint32(int16(exp) + Bias32)
+		biasedExp := uint32(int16(exp) + bias32)
 
 		// Check if coefficient fits in 20 bits (2^20 = 1048576)
 		if coe < (1 << 20) {
@@ -150,7 +150,7 @@ func (x *X32) unpack() (kind, signc, int8, uint32, error) {
 		// Extract encoded exponent: 2 bits in combination field + 6 bits in exponent continuation field
 		encodedExp := int16(((bits >> 29) & 0x3) << 6)
 		encodedExp |= int16((bits >> 21) & 0x3F)
-		exp = int8(encodedExp - Bias32) // Remove bias to get decoded exponent
+		exp = int8(encodedExp - bias32) // Remove bias to get decoded exponent
 
 		// Extract coefficient
 		coe = bits & 0x1FFFFF
@@ -158,7 +158,7 @@ func (x *X32) unpack() (kind, signc, int8, uint32, error) {
 		// Normal format
 		// Extract encoded exponent: 8 bits after sign
 		encodedExp := int16((bits >> 23) & 0xFF)
-		exp = int8(encodedExp - Bias32) // Remove bias to get decoded exponent
+		exp = int8(encodedExp - bias32) // Remove bias to get decoded exponent
 
 		// Extract coefficient
 		coe = bits & 0xFFFFF
@@ -224,8 +224,8 @@ func (x *X32) Round(mode Rounding, precision uint) error {
 	}
 
 	// For special cases of subnormal or extreme values
-	if exp < Emin32 || exp > Emax32 {
-		if exp < Emin32 {
+	if exp < eMin32 || exp > eMax32 {
+		if exp < eMin32 {
 			// If exponent is too small, try to adjust by reducing precision
 			// This is a simplification - full subnormal handling would be more complex
 			if newCoe == 0 {
@@ -233,20 +233,20 @@ func (x *X32) Round(mode Rounding, precision uint) error {
 				exp = 0
 			} else if (newCoe % 10) == 0 {
 				// Can shift right to increase exponent
-				for exp < Emin32 && (newCoe%10) == 0 {
+				for exp < eMin32 && (newCoe%10) == 0 {
 					newCoe /= 10
 					exp++
 				}
 			}
 
 			// If still too small, return error or set to zero
-			if exp < Emin32 {
+			if exp < eMin32 {
 				if newCoe == 0 {
 					return x.pack(kind_finite, sign, 0, 0) // Return zero
 				}
 				return newInternalError(exp, "exponent out of range")
 			}
-		} else if exp > Emax32 {
+		} else if exp > eMax32 {
 			// If exponent is too large, return infinity
 			return x.pack(kind_infinity, sign, 0, 0)
 		}
@@ -254,111 +254,4 @@ func (x *X32) Round(mode Rounding, precision uint) error {
 
 	// Pack the result back
 	return x.pack(k, sign, exp, newCoe)
-}
-
-// quantize implements the IEEE 754-2008 quantize operation
-func quantize(x X64, expTarget int16, mode Rounding) X64 {
-	k, sign, exp, coe, err := x.unpack()
-	if err != nil || k != kind_finite {
-		return x // Return the original for special values
-	}
-
-	// If the exponents already match, no adjustment needed
-	if exp == expTarget {
-		return x
-	}
-
-	var result X64
-
-	if exp > expTarget {
-		// Need to reduce precision (move decimal point right)
-		// Calculate how many digits to shift
-		shift := exp - expTarget
-
-		// Multiply coefficient by 10^shift
-		for i := int16(0); i < shift; i++ {
-			if coe > MaxCoefficient64/10 {
-				// Overflow - return infinity
-				result.pack(kind_infinity, sign, 0, 0)
-				return result
-			}
-			coe *= 10
-		}
-
-		// Pack the result
-		result.pack(kind_finite, sign, expTarget, coe)
-		return result
-	} else {
-		// Need to increase precision (move decimal point left)
-		// Calculate how many digits to shift
-		shift := expTarget - exp
-
-		// Apply rounding based on the target exponent
-		var newCoe uint64
-
-		if shift >= int16(countDigits(coe)) {
-			// All digits would be removed - result is 0 or 1 depending on rounding
-			switch mode {
-			case RoundTowardPositive:
-				if sign == signc_positive {
-					newCoe = 1
-				} else {
-					newCoe = 0
-				}
-			case RoundTowardNegative:
-				if sign == signc_negative {
-					newCoe = 1
-				} else {
-					newCoe = 0
-				}
-			case RoundTiesToAway:
-				// If halfway, round away from zero
-				if shift == int16(countDigits(coe)) && coe >= 5 {
-					newCoe = 1
-				} else {
-					newCoe = 0
-				}
-			default: // RoundTiesToEven, RoundTowardZero
-				newCoe = 0
-			}
-		} else {
-			// Calculate divisor (10^shift)
-			divisor := uint64(1)
-			for i := int16(0); i < shift; i++ {
-				divisor *= 10
-			}
-
-			// Apply rounding
-			quotient := coe / divisor
-			remainder := coe % divisor
-			halfDivisor := divisor / 2
-
-			switch mode {
-			case RoundTiesToEven:
-				if remainder > halfDivisor || (remainder == halfDivisor && (quotient&1) == 1) {
-					quotient++
-				}
-			case RoundTiesToAway:
-				if remainder >= halfDivisor {
-					quotient++
-				}
-			case RoundTowardPositive:
-				if remainder > 0 && sign == signc_positive {
-					quotient++
-				}
-			case RoundTowardNegative:
-				if remainder > 0 && sign == signc_negative {
-					quotient++
-				}
-			case RoundTowardZero:
-				// quotient is already truncated
-			}
-
-			newCoe = quotient
-		}
-
-		// Pack the result
-		result.pack(kind_finite, sign, expTarget, newCoe)
-		return result
-	}
 }
