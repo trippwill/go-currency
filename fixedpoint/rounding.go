@@ -32,7 +32,10 @@ const (
 )
 
 // DefaultRoundingMode is the default rounding mode (RoundTiesToEven)
-const DefaultRoundingMode = RoundTiesToEven
+const (
+	DefaultRoundingMode = RoundTiesToEven
+	MaxRoundingMode     = RoundTowardZero
+)
 
 // String returns the string representation of the rounding mode.
 func (r Rounding) String() string {
@@ -70,15 +73,16 @@ func (r Rounding) Debug() string {
 	}
 }
 
-// Apply applies the specified rounding mode to a coefficient to reduce it to the target precision.
+// apply applies the specified rounding mode to a coefficient to reduce it to the target precision.
 // It returns the rounded coefficient and the number of digits removed.
-func Apply[E int8 | int16, C uint32 | uint64](mode Rounding, coef C, exp E, precision uint, sign signc) (C, uint) {
+func apply[E int8 | int16, C uint32 | uint64](mode Rounding, coef C, exp E, prec Precision, sign signc) (C, uint8) {
 	if coef == 0 {
 		return 0, 0 // Zero doesn't need rounding
 	}
 
 	digits := countDigits(coef)
 
+	precision := uint8(prec)
 	// If we're already at or below the target precision, no rounding needed
 	if digits <= precision {
 		return coef, 0
@@ -93,7 +97,7 @@ func Apply[E int8 | int16, C uint32 | uint64](mode Rounding, coef C, exp E, prec
 
 	// Calculate divisor (10^digitsToRemove)
 	var divisor, powerOfTen C = 1, 10
-	for i := uint(1); i <= digitsToRemove; i++ {
+	for i := uint8(1); i <= digitsToRemove; i++ {
 		divisor *= powerOfTen
 	}
 
@@ -140,12 +144,12 @@ func Apply[E int8 | int16, C uint32 | uint64](mode Rounding, coef C, exp E, prec
 }
 
 // countDigits returns the number of decimal digits in a number.
-func countDigits[T uint32 | uint64](n T) uint {
+func countDigits[T uint32 | uint64](n T) uint8 {
 	if n == 0 {
 		return 1
 	}
 
-	var count uint = 0
+	var count uint8 = 0
 	for n > 0 {
 		n /= 10
 		count++

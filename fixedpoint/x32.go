@@ -196,7 +196,7 @@ func (x *X32) isInf() bool {
 
 // Round applies the specified rounding mode to an X32 value to achieve the target precision.
 // It implements the rounding behavior defined in IEEE 754-2008.
-func (x *X32) Round(mode Rounding, precision uint) error {
+func (x *X32) Round(mode Rounding, precision Precision) error {
 	k, sign, exp, coe, err := x.unpack()
 	if err != nil {
 		return err
@@ -211,12 +211,12 @@ func (x *X32) Round(mode Rounding, precision uint) error {
 	digits := countDigits(coe)
 
 	// If we're already at or below the target precision, no rounding needed
-	if digits <= precision {
+	if digits <= uint8(precision) {
 		return nil
 	}
 
 	// Apply rounding to the coefficient
-	newCoe, digitsRemoved := Apply(mode, coe, exp, precision, sign)
+	newCoe, digitsRemoved := apply(mode, coe, exp, precision, sign)
 
 	// If digits were removed, adjust the exponent
 	if digitsRemoved > 0 {

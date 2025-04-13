@@ -40,7 +40,7 @@ func TestRoundingApply64(t *testing.T) {
 		precision uint
 		sign      signc
 		expected  uint64
-		removed   uint
+		removed   uint8
 	}{
 		// RoundTiesToEven (banker's rounding)
 		{"TiesToEven-NoRounding", RoundTiesToEven, 123, 0, 3, signc_positive, 123, 0},
@@ -84,7 +84,7 @@ func TestRoundingApply64(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			rounded, removed := Apply(test.rounding, test.coe, test.exp, test.precision, test.sign)
+			rounded, removed := apply(test.rounding, test.coe, test.exp, Precision(test.precision), test.sign)
 			if rounded != test.expected {
 				t.Errorf("Apply() rounded = %v, want %v", rounded, test.expected)
 			}
@@ -105,7 +105,7 @@ func TestRoundingApply32(t *testing.T) {
 		precision uint
 		sign      signc
 		expected  uint32
-		removed   uint
+		removed   uint8
 	}{
 		// RoundTiesToEven (banker's rounding)
 		{"TiesToEven-NoRounding", RoundTiesToEven, 123, 0, 3, signc_positive, 123, 0},
@@ -120,7 +120,7 @@ func TestRoundingApply32(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			rounded, removed := Apply(test.rounding, test.coe, test.exp, test.precision, test.sign)
+			rounded, removed := apply(test.rounding, test.coe, test.exp, Precision(test.precision), test.sign)
 			if rounded != test.expected {
 				t.Errorf("Apply() rounded = %v, want %v", rounded, test.expected)
 			}
@@ -135,7 +135,7 @@ func TestRoundingApply32(t *testing.T) {
 func TestCountDigits(t *testing.T) {
 	tests := []struct {
 		value    uint64
-		expected uint
+		expected uint8
 	}{
 		{0, 1},
 		{1, 1},

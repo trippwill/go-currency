@@ -54,3 +54,11 @@ func BenchmarkString(b *testing.B) {
 		_ = x.String()
 	}
 }
+
+func BenchmarkParse(b *testing.B) {
+	c := BasicContext64()
+
+	for b.Loop() {
+		_ = c.Parse("-1234567.890")
+	}
+}
